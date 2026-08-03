@@ -1,0 +1,61 @@
+# Staging stack — images come from GHCR (built by GitHub Actions).
+# On the VPS, place this file at ~/adzmate/docker-compose.staging.yml
+# alongside .env.staging (never commit secrets).
+
+services:
+  api:
+    image: ${API_IMAGE:?API_IMAGE is required}
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    environment:
+      DATABASE_URL: sqlite+aiosqlite:////app/apps/api/data/adzmate.db
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
+      WEB_APP_URL: ${WEB_APP_URL:-http://localhost:3000}
+    volumes:
+      - adzmate_db:/app/apps/api/data
+      - adzmate_uploads:/app/apps/api/uploads
+      - adzmate_generated:/app/apps/api/generated
+      - adzmate_previews:/app/apps/api/previews
+    ports:
+      - "${API_HOST_PORT:-8000}:8000"
+    networks:
+      - adzmate
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  web:
+    image: ${WEB_IMAGE:?WEB_IMAGE is required}
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+    ports:
+      - "${WEB_HOST_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - adzmate
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  adzmate_db:
+  adzmate_uploads:
+  adzmate_generated:
+  adzmate_previews:
+
+networks:
+  adzmate:
+    driver: bridge

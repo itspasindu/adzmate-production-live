@@ -1,0 +1,5 @@
+# Ignore noisy rules for slim base images; keep errors for real issues.
+ignored:
+  - DL3008  # apt package version pinning
+  - DL3018  # apk version pinning
+  - DL3009  # delete apt lists (we already do)

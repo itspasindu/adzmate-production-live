@@ -1,0 +1,11 @@
+# Gitleaks configuration — https://github.com/gitleaks/gitleaks
+title = "AdzMate gitleaks"
+
+[allowlist]
+  description = "False positives / local fixtures"
+  paths = [
+    '''fixtures/.*''',
+    '''.*\.md''',
+    '''\.env\.staging\.example''',
+    '''apps/.*/\.env\.example''',
+  ]

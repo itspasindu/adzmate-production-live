@@ -1,0 +1,230 @@
+name: Deploy Staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+    inputs:
+      skip_smoke:
+        description: "Skip post-deploy smoke checks"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  ci-gate:
+    name: Reuse CI quality gates
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    secrets: inherit
+
+  build-and-push:
+    name: Build, scan, push images
+    needs: [ci-gate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: staging
+    outputs:
+      api_image: ${{ steps.meta-api.outputs.image }}
+      web_image: ${{ steps.meta-web.outputs.image }}
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set image tag + prefix
+        id: meta
+        run: |
+          SHA_SHORT="${GITHUB_SHA::12}"
+          OWNER="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "tag=staging-${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA_SHORT}" >> "$GITHUB_OUTPUT"
+          echo "prefix=ghcr.io/${OWNER}/adzmate" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: API image refs
+        id: meta-api
+        run: |
+          IMG="${{ steps.meta.outputs.prefix }}-api"
+          TAG="${{ steps.meta.outputs.tag }}"
+          echo "image=${IMG}:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "cache=${IMG}:buildcache" >> "$GITHUB_OUTPUT"
+          echo "latest_staging=${IMG}:staging" >> "$GITHUB_OUTPUT"
+
+      - name: Web image refs
+        id: meta-web
+        run: |
+          IMG="${{ steps.meta.outputs.prefix }}-web"
+          TAG="${{ steps.meta.outputs.tag }}"
+          echo "image=${IMG}:${TAG}" >> "$GITHUB_OUTPUT"
+          echo "cache=${IMG}:buildcache" >> "$GITHUB_OUTPUT"
+          echo "latest_staging=${IMG}:staging" >> "$GITHUB_OUTPUT"
+
+      - name: Build & push API
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta-api.outputs.image }}
+            ${{ steps.meta-api.outputs.latest_staging }}
+          cache-from: type=registry,ref=${{ steps.meta-api.outputs.cache }}
+          cache-to: type=registry,ref=${{ steps.meta-api.outputs.cache }},mode=max
+          provenance: false
+
+      - name: Build & push Web
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta-web.outputs.image }}
+            ${{ steps.meta-web.outputs.latest_staging }}
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ secrets.STAGING_API_URL }}
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+            API_INTERNAL_URL=http://api:8000
+          cache-from: type=registry,ref=${{ steps.meta-web.outputs.cache }}
+          cache-to: type=registry,ref=${{ steps.meta-web.outputs.cache }},mode=max
+          provenance: false
+
+      - name: Trivy scan API image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.meta-api.outputs.image }}
+          format: sarif
+          output: trivy-api.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Trivy scan Web image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.meta-web.outputs.image }}
+          format: sarif
+          output: trivy-web.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF (API)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-api.sarif
+          category: trivy-api
+
+      - name: Upload Trivy SARIF (Web)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-web.sarif
+          category: trivy-web
+
+      - name: Generate SBOM (API)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta-api.outputs.image }}
+          format: spdx-json
+          artifact-name: sbom-api.spdx.json
+
+      - name: Generate SBOM (Web)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ steps.meta-web.outputs.image }}
+          format: spdx-json
+          artifact-name: sbom-web.spdx.json
+
+  deploy:
+    name: Deploy to staging VPS (SSH)
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: ${{ secrets.STAGING_WEB_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Sync compose + deploy script to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_SSH_PORT || 22 }}
+          source: "docker-compose.staging.yml,scripts/deploy-staging.sh"
+          target: ${{ secrets.STAGING_DEPLOY_PATH }}
+          overwrite: true
+
+      - name: Remote deploy
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          API_IMAGE: ${{ needs.build-and-push.outputs.api_image }}
+          WEB_IMAGE: ${{ needs.build-and-push.outputs.web_image }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          DEPLOY_DIR: ${{ secrets.STAGING_DEPLOY_PATH }}
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_SSH_PORT || 22 }}
+          envs: API_IMAGE,WEB_IMAGE,GHCR_TOKEN,GHCR_USER,DEPLOY_DIR
+          script: |
+            set -euo pipefail
+            cd "$DEPLOY_DIR"
+            chmod +x scripts/deploy-staging.sh
+            DEPLOY_DIR="$DEPLOY_DIR" \
+              API_IMAGE="$API_IMAGE" \
+              WEB_IMAGE="$WEB_IMAGE" \
+              GHCR_TOKEN="$GHCR_TOKEN" \
+              GHCR_USER="$GHCR_USER" \
+              bash scripts/deploy-staging.sh
+
+  smoke:
+    name: Staging smoke tests
+    needs: [deploy]
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.skip_smoke != true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run smoke script
+        env:
+          STAGING_WEB_URL: ${{ secrets.STAGING_WEB_URL }}
+          STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
+        run: |
+          chmod +x scripts/smoke-staging.sh
+          bash scripts/smoke-staging.sh

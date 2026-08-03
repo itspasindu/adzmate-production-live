@@ -1,0 +1,10 @@
+# AdzMate CODEOWNERS — update GitHub usernames before enforcing branch protection.
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+*       @pasindudewviman
+
+/.github/                 @pasindudewviman
+/apps/api/                @pasindudewviman
+/apps/web/                @pasindudewviman
+/docker-compose*.yml      @pasindudewviman
+/scripts/                 @pasindudewviman

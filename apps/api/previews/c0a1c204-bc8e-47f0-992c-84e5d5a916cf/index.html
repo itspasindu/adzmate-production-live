@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lumen — Aurora Bottle</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --primary: #0B3D2E;
+      --accent: #C45C26;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Outfit", system-ui, sans-serif;
+      color: #f7f3ec;
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 600px at 10% -10%, color-mix(in srgb, var(--accent) 35%, transparent), transparent),
+        linear-gradient(155deg, var(--primary) 0%, #061912 55%, #0a1f18 100%);
+    }
+    .hero {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 2rem;
+      align-items: center;
+      padding: 4rem clamp(1.5rem, 5vw, 5rem);
+    }
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; padding-top: 2.5rem; }
+    }
+    .brand {
+      font-family: "Fraunces", Georgia, serif;
+      font-size: clamp(2.8rem, 7vw, 5rem);
+      line-height: 0.95;
+      letter-spacing: -0.03em;
+      margin-bottom: 1rem;
+    }
+    .headline {
+      font-size: clamp(1.15rem, 2.4vw, 1.55rem);
+      font-weight: 500;
+      max-width: 28ch;
+      margin-bottom: 0.85rem;
+    }
+    .sub {
+      opacity: 0.82;
+      max-width: 42ch;
+      line-height: 1.55;
+      margin-bottom: 1.75rem;
+    }
+    .cta {
+      display: inline-block;
+      background: var(--accent);
+      color: #1a1208;
+      text-decoration: none;
+      font-weight: 600;
+      padding: 0.9rem 1.4rem;
+      border-radius: 6px;
+      transition: transform 0.25s ease, box-shadow 0.25s ease;
+    }
+    .cta:hover { transform: translateY(-2px); box-shadow: 0 12px 30px rgba(0,0,0,0.25); }
+    .visual {
+      position: relative;
+      min-height: 420px;
+      border-radius: 0;
+      overflow: hidden;
+      background: color-mix(in srgb, var(--primary) 70%, black);
+      animation: rise 0.9s ease both;
+    }
+    .visual img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      min-height: 420px;
+    }
+    .copy { animation: fade 0.8s ease 0.15s both; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(24px) scale(1.02); }
+      to { opacity: 1; transform: none; }
+    }
+    @keyframes fade {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: none; }
+    }
+    .meta {
+      margin-top: 2rem;
+      font-size: 0.8rem;
+      opacity: 0.55;
+    }
+  </style>
+</head>
+<body>
+  <main class="hero">
+    <section class="copy">
+      <p class="brand">Lumen</p>
+      <h1 class="headline">Aurora Bottle: Built for impact</h1>
+      <p class="sub">Launch a premium insulated bottle for urban professionals. Emphasize all-day cold and refined design.</p>
+      <a class="cta" href="#offer">Shop Now</a>
+      <p class="meta">Auto-deployed by AdzMate · Campaign c0a1c204-bc8e-47f0-992c-84e5d5a916cf</p>
+    </section>
+    <section class="visual">
+      
+      <img src="http://localhost:8000/generated/c0a1c204-bc8e-47f0-992c-84e5d5a916cf/creatives/meta_feed.png" alt="Aurora Bottle" />
+      
+    </section>
+  </main>
+</body>
+</html>
