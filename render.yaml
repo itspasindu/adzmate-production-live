@@ -1,0 +1,38 @@
+# Render Blueprint — AdzMate API
+# Dashboard: New → Blueprint → connect this repo
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: adzmate-api
+    runtime: python
+    plan: free
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.8"
+      - key: AUTH_ENABLED
+        value: "true"
+      - key: ADZMATE_USE_LLM
+        value: "0"
+      - key: ADZMATE_USE_AI_IMAGES
+        value: "0"
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: WEB_APP_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        value: sqlite+aiosqlite:////var/data/adzmate.db
+    disk:
+      name: adzmate-data
+      mountPath: /var/data
+      sizeGB: 1
