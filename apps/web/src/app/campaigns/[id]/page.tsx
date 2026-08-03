@@ -438,7 +438,7 @@ export default function CampaignDetailPage() {
                   Run 3 days
                 </button>
               </div>
-              {campaign.optimization?.actions && (
+              {campaign.optimization?.ads && campaign.optimization.ads.length > 0 && (
                 <ul className="mt-4 space-y-2">
                   {campaign.optimization.ads.map((ad) => (
                     <li key={ad.ad_id || ad.name} className="flex items-center justify-between text-sm">
