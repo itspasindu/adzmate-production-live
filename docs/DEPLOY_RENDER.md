@@ -26,38 +26,43 @@ Avoids Dockerfile context issues in a monorepo.
 
 ---
 
-## If you use Docker (common failure)
+## If you use Docker
 
-Your error:
-
-```text
-transferring context: 2B
-"/apps/api": not found
-```
-
-means Render’s **Docker build context is wrong**.  
-`apps/api/Dockerfile` expects the **repository root** as context (it `COPY apps/api` and `COPY fixtures`).
+`apps/api/Dockerfile` expects **build context = `apps/api`** (not the monorepo root).
 
 ### Correct Docker settings
 
 | Field | Value |
 |-------|--------|
 | **Environment** | Docker |
-| **Root Directory** | *(leave empty)* |
-| **Dockerfile Path** | `apps/api/Dockerfile` |
-| **Docker Context** | `.` (repo root) |
-
-Wrong (causes your error): Root Directory = `apps/api` while using that Dockerfile.
+| **Root Directory** | `apps/api` |
+| **Dockerfile Path** | `Dockerfile` |
+| **Docker Context** | `.` *(blank or `.` only)* |
 
 ### Start command with `$PORT`
 
-Render injects `PORT`. Override Docker CMD if needed:
+Render injects `PORT`. Set **Docker Command** to:
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-(In Render Docker services you can set **Docker Command** to that.)
+### Common failure (`transferring context: 2B`)
+
+```text
+transferring context: 2B
+"/apps/api/requirements.txt": not found
+```
+
+Means the Docker context directory is empty or wrong. Typical mistakes:
+
+| Wrong | Why it breaks |
+|-------|----------------|
+| Root Directory empty + Dockerfile still `COPY`s as if context were `apps/api` | paths missing (older Dockerfile) |
+| Root Directory = `apps/api` **and** Docker Context = `apps/api` | context becomes `apps/api/apps/api` → **2B / not found** |
+| Dockerfile Path = `apps/api/Dockerfile` with Root Directory = `apps/api` | path becomes `apps/api/apps/api/Dockerfile` |
+
+Fix: Root Directory `apps/api`, Dockerfile Path `Dockerfile`, Docker Context `.`
 
 ---
 

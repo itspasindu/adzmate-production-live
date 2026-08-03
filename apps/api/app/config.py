@@ -18,7 +18,8 @@ class Settings(BaseSettings):
     app_name: str = "AdzMate API"
     database_url: str = f"sqlite+aiosqlite:///{API_ROOT / 'adzmate.db'}"
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
-    fixtures_dir: Path = ROOT / "fixtures"
+    # Prefer apps/api/fixtures (Docker / Root Directory = apps/api); fall back to repo-root fixtures
+    fixtures_dir: Path = API_ROOT / "fixtures"
     uploads_dir: Path = API_ROOT / "uploads"
     generated_dir: Path = API_ROOT / "generated"
     previews_dir: Path = API_ROOT / "previews"
@@ -62,6 +63,10 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+if os.getenv("FIXTURES_DIR"):
+    settings.fixtures_dir = Path(os.getenv("FIXTURES_DIR", ""))
+elif not settings.fixtures_dir.is_dir() and (ROOT / "fixtures").is_dir():
+    settings.fixtures_dir = ROOT / "fixtures"
 if os.getenv("FORCE_FAIL_AGENT"):
     settings.force_fail_agent = os.getenv("FORCE_FAIL_AGENT")
 

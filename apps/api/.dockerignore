@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+adzmate.db
+__pycache__
+*.pyc
+.venv
+venv
+uploads/*
+!uploads/.gitkeep
+generated/*
+!generated/.gitkeep
+previews/*
+!previews/.gitkeep
+_tmp_id.txt

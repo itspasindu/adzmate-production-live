@@ -1,11 +1,13 @@
 # syntax=docker/dockerfile:1
-# Build from REPOSITORY ROOT (not apps/api):
-#   docker build -f apps/api/Dockerfile .
+# Build context = apps/api (NOT the monorepo root).
+#
 # Render Docker settings:
-#   Root Directory = (empty)
-#   Dockerfile Path = apps/api/Dockerfile
-#   Docker Context  = .
-# If Root Directory is set to apps/api, COPY apps/api / fixtures will fail (context 2B).
+#   Root Directory  = apps/api
+#   Dockerfile Path = Dockerfile
+#   Docker Context  = .          ← blank or ".", never "apps/api"
+#
+# Local:
+#   docker build -t adzmate-api -f apps/api/Dockerfile apps/api
 FROM python:3.12-slim AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -21,15 +23,19 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Repo layout expected by app.config (ROOT = /app)
-COPY apps/api/requirements.txt /app/apps/api/requirements.txt
+# Keep monorepo paths so app.config ROOT (= parents[3]) resolves to /app
+COPY requirements.txt /app/apps/api/requirements.txt
 RUN pip install --no-cache-dir -r /app/apps/api/requirements.txt
 
-COPY apps/api /app/apps/api
-COPY fixtures /app/fixtures
-COPY apps/api/docker-entrypoint.sh /entrypoint.sh
+COPY . /app/apps/api
+COPY docker-entrypoint.sh /entrypoint.sh
 
-RUN mkdir -p /app/apps/api/uploads /app/apps/api/generated /app/apps/api/previews /app/apps/api/data \
+# Expose fixtures at /app/fixtures for ROOT / "fixtures" lookups
+RUN if [ -d /app/apps/api/fixtures ]; then \
+      mkdir -p /app/fixtures \
+      && cp -a /app/apps/api/fixtures/. /app/fixtures/; \
+    fi \
+    && mkdir -p /app/apps/api/uploads /app/apps/api/generated /app/apps/api/previews /app/apps/api/data \
     && chown -R adzmate:adzmate /app \
     && chmod +x /entrypoint.sh
 
@@ -41,6 +47,6 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS http://127.0.0.1:8000/api/health || exit 1
 
 ENTRYPOINT ["/entrypoint.sh"]
-# Render sets $PORT — prefer Docker Command in dashboard:
+# Render sets $PORT — set Docker Command to:
 #   uvicorn app.main:app --host 0.0.0.0 --port $PORT
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

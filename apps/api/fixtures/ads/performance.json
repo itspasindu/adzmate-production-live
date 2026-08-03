@@ -1,0 +1,17 @@
+{
+  "healthy": {
+    "meta": {"spend": 420.0, "revenue": 1680.0, "impressions": 54000, "clicks": 2100, "status": "active"},
+    "google": {"spend": 380.0, "revenue": 1520.0, "impressions": 41000, "clicks": 1800, "status": "active"},
+    "tiktok": {"spend": 290.0, "revenue": 1160.0, "impressions": 92000, "clicks": 3200, "status": "active"}
+  },
+  "poor_roas": {
+    "meta": {"spend": 890.0, "revenue": 420.0, "impressions": 61000, "clicks": 900, "status": "active"},
+    "google": {"spend": 740.0, "revenue": 310.0, "impressions": 38000, "clicks": 620, "status": "active"},
+    "tiktok": {"spend": 610.0, "revenue": 280.0, "impressions": 88000, "clicks": 1100, "status": "active"}
+  },
+  "mixed_sentiment": {
+    "meta": {"spend": 510.0, "revenue": 980.0, "impressions": 48000, "clicks": 1500, "status": "active"},
+    "google": {"spend": 430.0, "revenue": 860.0, "impressions": 36000, "clicks": 1200, "status": "active"},
+    "tiktok": {"spend": 350.0, "revenue": 640.0, "impressions": 75000, "clicks": 2400, "status": "active"}
+  }
+}
