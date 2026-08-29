@@ -16,6 +16,7 @@ import {
   selectAudiences,
   setAutoPause,
   submitMetaReview,
+  syncMetaMetrics,
 } from "@/lib/api";
 import { Alert, PageHeader, StatusBadge } from "@/components/ui";
 import { useApiAuth } from "@/lib/useApiAuth";
@@ -842,6 +843,16 @@ function MetaAutomationPanels({
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {publishStatus === "published" && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="btn-secondary"
+                  onClick={() => run((opts) => syncMetaMetrics(campaignId, opts))}
+                >
+                  Sync Meta metrics
+                </button>
+              )}
               {publishStatus !== "published" && (
                 <>
                   <button

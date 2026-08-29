@@ -157,12 +157,7 @@ adzmate/
   apps/web/       # Next.js dashboard
   fixtures/       # Mock ads + social comments
   packages/shared/
-  .github/        # CI + staging deploy (GHCR → VPS SSH)
-  docs/STAGING_CICD.md
+  docs/           # Architecture, deploy guides, project plan
 ```
 
-## Staging CI/CD
-
-Push/merge to the **`staging`** branch runs corporate CI (lint, build, secret scan, CodeQL, image scan) and deploys to the staging VPS over SSH.
-
-See [docs/STAGING_CICD.md](docs/STAGING_CICD.md) for secrets, VPS bootstrap, and branch protection.
+Deploy manually via [Render](docs/DEPLOY_RENDER.md) (API) and [Vercel](docs/DEPLOY_RENDER.md) (web). See [docs/ENV_SETUP.md](docs/ENV_SETUP.md) for production environment variables.

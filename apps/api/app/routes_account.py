@@ -270,7 +270,7 @@ async def meta_oauth_start(
         settings.meta_oauth_redirect_uri
         or f"{settings.public_base_url.rstrip('/')}/api/meta/oauth/callback"
     )
-    url = meta_svc.build_oauth_url(
+    url = await meta_svc.build_oauth_url(
         business_id=business_id,
         workspace_id=ctx.workspace.id,
         user_id=ctx.user.id,
@@ -294,7 +294,7 @@ async def meta_oauth_callback(
     if not code or not state:
         return RedirectResponse(f"{frontend}/settings?meta=error&message=missing_code")
 
-    payload = meta_svc.pop_oauth_state(state)
+    payload = await meta_svc.pop_oauth_state(state)
     if not payload:
         return RedirectResponse(f"{frontend}/settings?meta=error&message=invalid_state")
 
@@ -333,6 +333,8 @@ async def meta_demo_connect(
     db: AsyncSession = Depends(get_db),
 ):
     """Seed a demo Meta connection (Pages, Instagram, Ad Accounts) without Facebook OAuth."""
+    if settings.is_production() and not settings.allow_demo_user:
+        raise HTTPException(403, "Demo Meta connect is disabled in production.")
     await _get_business_in_workspace(db, business_id, ctx.workspace.id)
     conn = await meta_svc.upsert_demo_connection(
         db, business_id=business_id, workspace_id=ctx.workspace.id
@@ -352,7 +354,10 @@ async def meta_sync(
     ).scalar_one_or_none()
     if not conn:
         raise HTTPException(404, "Meta account not connected")
-    if conn.status == "demo" or not conn.access_token or conn.access_token == "demo-token":
+    token = meta_svc.get_connection_access_token(conn)
+    if conn.status == "demo" or not token or token == "demo-token":
+        if settings.is_production() and not settings.allow_demo_user:
+            raise HTTPException(400, "Connect a real Meta account in production.")
         conn = await meta_svc.upsert_demo_connection(
             db, business_id=business_id, workspace_id=ctx.workspace.id
         )
@@ -360,7 +365,7 @@ async def meta_sync(
     if not meta_svc.meta_oauth_configured():
         raise HTTPException(400, "Cannot sync real Meta assets without META_APP_ID/SECRET")
     try:
-        await meta_svc.sync_connection_from_token(db, conn, conn.access_token, status="connected")
+        await meta_svc.sync_connection_from_token(db, conn, token, status="connected")
     except Exception as exc:
         raise HTTPException(400, f"Meta sync failed: {exc}") from exc
     return await _connection_out(db, conn)

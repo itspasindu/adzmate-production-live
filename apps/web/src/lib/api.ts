@@ -305,6 +305,10 @@ export function publishMetaCampaign(campaignId: string, opts?: RequestOpts) {
   return request<Campaign>(`/api/campaigns/${campaignId}/meta/publish`, { method: "POST" }, opts);
 }
 
+export function syncMetaMetrics(campaignId: string, opts?: RequestOpts) {
+  return request<Campaign>(`/api/campaigns/${campaignId}/meta/sync-metrics`, { method: "POST" }, opts);
+}
+
 export function runOptimizationTick(
   campaignId: string,
   body?: { scenario?: string; days?: number },

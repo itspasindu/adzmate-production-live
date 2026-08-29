@@ -7,6 +7,7 @@ from starlette.responses import PlainTextResponse
 
 from app.config import settings
 from app.db import init_db
+from app.redis_client import close_redis
 from app.routes import router
 from app.routes_account import router as account_router
 
@@ -15,49 +16,69 @@ from app.routes_account import router as account_router
 async def lifespan(_: FastAPI):
     await init_db()
     yield
+    await close_redis()
 
 
-class LocalCorsMiddleware(BaseHTTPMiddleware):
-    """Always allow browser calls from Next.js (localhost / 127.0.0.1 / any port)."""
+def _origin_allowed(origin: str | None) -> str | None:
+    if not origin or origin == "null":
+        return None
+    allowed = set(settings.cors_origins or [])
+    allowed.add(settings.web_app_url.rstrip("/"))
+    if settings.is_development():
+        return origin
+    if origin.rstrip("/") in allowed:
+        return origin
+    if origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1"):
+        return origin if settings.is_development() else None
+    return None
+
+
+class CorsMiddleware(BaseHTTPMiddleware):
+    """Development: permissive. Production: allowlist from CORS_ORIGINS + WEB_APP_URL."""
 
     async def dispatch(self, request: Request, call_next):
-        origin = request.headers.get("origin") or "*"
-        allow_origin = "*" if origin == "null" else origin
+        origin = request.headers.get("origin")
+        allow_origin = _origin_allowed(origin)
+        if settings.is_development() and not allow_origin:
+            allow_origin = origin or "*"
 
         if request.method == "OPTIONS":
             req_headers = request.headers.get("access-control-request-headers") or "*"
-            return PlainTextResponse(
-                "ok",
-                status_code=200,
-                headers={
-                    "Access-Control-Allow-Origin": allow_origin,
-                    "Access-Control-Allow-Methods": "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT",
-                    "Access-Control-Allow-Headers": req_headers,
-                    "Access-Control-Max-Age": "600",
-                    "Vary": "Origin",
-                },
-            )
+            headers = {
+                "Access-Control-Allow-Methods": "DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT",
+                "Access-Control-Allow-Headers": req_headers,
+                "Access-Control-Max-Age": "600",
+                "Vary": "Origin",
+            }
+            if allow_origin:
+                headers["Access-Control-Allow-Origin"] = allow_origin
+            return PlainTextResponse("ok", status_code=200, headers=headers)
 
         response: Response = await call_next(request)
-        response.headers["Access-Control-Allow-Origin"] = allow_origin
+        if allow_origin:
+            response.headers["Access-Control-Allow-Origin"] = allow_origin
         response.headers["Vary"] = "Origin"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         return response
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
-app.add_middleware(LocalCorsMiddleware)
+app.add_middleware(CorsMiddleware)
 app.include_router(router, prefix="/api")
 app.include_router(account_router, prefix="/api")
 
-app.mount("/uploads", StaticFiles(directory=str(settings.uploads_dir)), name="uploads")
-app.mount("/generated", StaticFiles(directory=str(settings.generated_dir)), name="generated")
-app.mount("/previews", StaticFiles(directory=str(settings.previews_dir), html=True), name="previews")
+if settings.effective_storage_backend() == "local":
+    app.mount("/uploads", StaticFiles(directory=str(settings.uploads_dir)), name="uploads")
+    app.mount("/generated", StaticFiles(directory=str(settings.generated_dir)), name="generated")
+    app.mount("/previews", StaticFiles(directory=str(settings.previews_dir), html=True), name="previews")
 
 
 @app.get("/")
 async def root():
     return {
         "name": "AdzMate Campaign Auto-Pilot",
+        "environment": settings.environment,
         "docs": "/docs",
         "health": "/api/health",
     }

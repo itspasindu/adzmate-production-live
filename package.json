@@ -10,6 +10,10 @@
     "dev:web": "npm run dev -w web",
     "build:web": "npm run build -w web",
     "dev:api": "cd apps/api && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
-    "seed": "cd apps/api && python -m app.seed"
+    "seed": "cd apps/api && python -m app.seed",
+    "migrate": "cd apps/api && alembic upgrade head",
+    "migrate:revision": "cd apps/api && alembic revision --autogenerate -m",
+    "worker:api": "cd apps/api && arq app.jobs.worker.WorkerSettings",
+    "test:api": "cd apps/api && pytest tests -q"
   }
 }

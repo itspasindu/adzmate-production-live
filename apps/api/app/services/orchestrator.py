@@ -22,7 +22,15 @@ from app.services.actions import log_action
 from app.services.aggregator import aggregate_signals, enrich_decision_reason
 from app.services.audiences import build_audience_state, enrich_audiences_with_llm
 from app.services.deployer import deploy_landing_page
-from app.services.meta_publish import build_draft_structure, mark_in_review, publish_structure
+from app.storage import resolve_asset_url
+from app.integrations.meta.context import resolve_publish_context
+from app.integrations.meta.metrics_sync import sync_campaign_metrics
+from app.integrations.meta.pause import pause_meta_structure
+from app.services.meta_publish import (
+    build_draft_for_workspace,
+    mark_in_review,
+    publish_structure,
+)
 from app.services.optimization import init_optimization_from_structure
 
 
@@ -68,6 +76,7 @@ async def run_pipeline(db: AsyncSession, campaign: Campaign) -> Campaign:
     campaign.status = "agents_running"
     campaign.warnings = []
     campaign.updated_at = utcnow()
+    await sync_campaign_metrics(db, campaign)
     if not campaign.mock_ads:
         campaign.mock_ads = load_base_ads(campaign.scenario)
     await db.commit()
@@ -247,9 +256,12 @@ async def run_pipeline(db: AsyncSession, campaign: Campaign) -> Campaign:
     rec_detail = campaign.decision_reason or ""
 
     if campaign.decision in ("LAUNCH", "HOLD") and campaign.status != "failed":
-        structure = build_draft_structure(
+        creative_assets = creative_payload.get("assets") or []
+        structure = await build_draft_for_workspace(
+            db,
             campaign,
-            assets=creative_payload.get("assets") or [],
+            assets=creative_assets,
+            workspace_id=campaign.workspace_id,
         )
         campaign.meta_structure = structure
         campaign.publish_status = "draft"
@@ -339,9 +351,9 @@ async def approve_recommendation(db: AsyncSession, campaign: Campaign, recommend
         cta = assets[0]["cta"] if assets else "Shop Now"
         image_url = assets[0]["url"] if assets else None
         if campaign.product_image_path:
-            image_url = image_url or f"http://localhost:8000/uploads/{campaign.id}/product.png"
+            image_url = image_url or resolve_asset_url(campaign.product_image_path)
 
-        deployed = deploy_landing_page(
+        deployed = await deploy_landing_page(
             campaign.id,
             campaign.brand_name,
             campaign.product_name,
@@ -365,7 +377,11 @@ async def approve_recommendation(db: AsyncSession, campaign: Campaign, recommend
         )
 
         if campaign.meta_structure:
-            published = publish_structure(campaign.meta_structure)
+            publish_ctx = await resolve_publish_context(db, campaign.workspace_id)
+            published = await publish_structure(
+                campaign.meta_structure,
+                publish_ctx=publish_ctx,
+            )
             campaign.meta_structure = published
             campaign.publish_status = "published"
             daily = float(getattr(campaign, "daily_budget", None) or 20.0)
@@ -397,6 +413,18 @@ async def approve_recommendation(db: AsyncSession, campaign: Campaign, recommend
     elif recommendation.type == "halt":
         campaign.status = "halted"
         campaign.decision = "HALT"
+        publish_ctx = await resolve_publish_context(db, campaign.workspace_id)
+        if publish_ctx and campaign.meta_structure and (campaign.meta_structure or {}).get("mode") == "meta_live":
+            paused = await pause_meta_structure(campaign.meta_structure, publish_ctx)
+            await log_action(
+                db,
+                campaign.id,
+                actor="strategy",
+                action="meta_paused",
+                summary=f"Paused {len(paused)} Meta objects via Marketing API",
+                detail=", ".join(paused[:5]) or None,
+                level="action",
+            )
         campaign.mock_ads = apply_pause(campaign.mock_ads)
         await log_action(
             db,
@@ -410,6 +438,19 @@ async def approve_recommendation(db: AsyncSession, campaign: Campaign, recommend
         await _emit(campaign.id, "status", {"status": "halted"})
 
     elif recommendation.type == "pause_ads":
+        publish_ctx = await resolve_publish_context(db, campaign.workspace_id)
+        if publish_ctx and campaign.meta_structure and (campaign.meta_structure or {}).get("mode") == "meta_live":
+            paused = await pause_meta_structure(campaign.meta_structure, publish_ctx)
+            if paused:
+                await log_action(
+                    db,
+                    campaign.id,
+                    actor="strategy",
+                    action="meta_paused",
+                    summary=f"Paused {len(paused)} Meta objects via Marketing API",
+                    detail=", ".join(paused[:5]),
+                    level="action",
+                )
         campaign.mock_ads = apply_pause(campaign.mock_ads)
         metrics = compute_metrics(campaign.mock_ads)
         existing = await db.execute(select(SignalSnapshot).where(SignalSnapshot.campaign_id == campaign.id))

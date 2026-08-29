@@ -65,6 +65,8 @@ async def _migrate_sqlite(conn) -> None:
 async def init_db() -> None:
     from app import models  # noqa: F401
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        await _migrate_sqlite(conn)
+    if str(settings.database_url).startswith("sqlite"):
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            await _migrate_sqlite(conn)
+    # PostgreSQL schema is managed by Alembic (`alembic upgrade head` on deploy).

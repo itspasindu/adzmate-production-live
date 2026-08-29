@@ -112,7 +112,12 @@ async def get_optional_user(
     access_token: str | None = Query(default=None),
 ) -> AuthUser | None:
     if not auth_enabled():
-        return AuthUser(id="local-demo", email="demo@local.dev")
+        if settings.allow_demo_user or settings.is_development():
+            return AuthUser(id="local-demo", email="demo@local.dev")
+        raise HTTPException(
+            status_code=503,
+            detail="Authentication is not configured. Set SUPABASE_URL and SUPABASE_JWT_SECRET.",
+        )
 
     token = _extract_bearer(authorization) or access_token
     if not token:
@@ -145,7 +150,7 @@ async def ensure_default_workspace(db: AsyncSession, user: AuthUser) -> Workspac
         return WorkspaceContext(user=user, workspace=workspace, role=member.role)
 
     # Local demo mode: reuse seeded workspace so seed campaigns remain visible
-    if user.id == "local-demo":
+    if user.id == "local-demo" and (settings.allow_demo_user or settings.is_development()):
         workspace_id = settings.demo_workspace_id
         workspace = (
             await db.execute(select(Workspace).where(Workspace.id == workspace_id))

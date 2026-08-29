@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.crypto import encrypt_secret
 from app.models import MetaAdAccount, MetaConnection, MetaInstagramAccount, MetaPage, utcnow
 
 logger = logging.getLogger(__name__)
@@ -36,22 +37,44 @@ META_SCOPES = [
     "instagram_basic",
 ]
 
-# In-memory OAuth state (fine for single-node demo; use Redis in production)
+# OAuth state: Redis in production, in-memory fallback for local dev
 _oauth_states: dict[str, dict] = {}
+_OAUTH_PREFIX = "adzmate:meta_oauth:"
 
 
-def meta_oauth_configured() -> bool:
-    return bool(settings.meta_app_id and settings.meta_app_secret)
+async def store_oauth_state(state: str, payload: dict, ttl_seconds: int = 600) -> None:
+    from app.redis_client import redis_set_json
+
+    key = f"{_OAUTH_PREFIX}{state}"
+    if await redis_set_json(key, payload, ttl_seconds=ttl_seconds):
+        return
+    _oauth_states[state] = payload
 
 
-def build_oauth_url(*, business_id: str, workspace_id: str, user_id: str, redirect_uri: str) -> str:
+async def pop_oauth_state(state: str) -> dict | None:
+    from app.redis_client import get_redis, redis_delete, redis_get_json
+
+    key = f"{_OAUTH_PREFIX}{state}"
+    client = await get_redis()
+    if client:
+        payload = await redis_get_json(key)
+        await redis_delete(key)
+        if payload:
+            return payload
+    return _oauth_states.pop(state, None)
+
+
+async def build_oauth_url(*, business_id: str, workspace_id: str, user_id: str, redirect_uri: str) -> str:
     state = secrets.token_urlsafe(24)
-    _oauth_states[state] = {
-        "business_id": business_id,
-        "workspace_id": workspace_id,
-        "user_id": user_id,
-        "redirect_uri": redirect_uri,
-    }
+    await store_oauth_state(
+        state,
+        {
+            "business_id": business_id,
+            "workspace_id": workspace_id,
+            "user_id": user_id,
+            "redirect_uri": redirect_uri,
+        },
+    )
     params = {
         "client_id": settings.meta_app_id,
         "redirect_uri": redirect_uri,
@@ -62,8 +85,14 @@ def build_oauth_url(*, business_id: str, workspace_id: str, user_id: str, redire
     return f"{OAUTH_DIALOG}?{urlencode(params)}"
 
 
-def pop_oauth_state(state: str) -> dict | None:
-    return _oauth_states.pop(state, None)
+def meta_oauth_configured() -> bool:
+    return bool(settings.meta_app_id and settings.meta_app_secret)
+
+
+def get_connection_access_token(connection: MetaConnection) -> str | None:
+    from app.crypto import decrypt_secret
+
+    return decrypt_secret(connection.access_token)
 
 
 def _appsecret_proof(token: str) -> str:
@@ -106,6 +135,57 @@ async def graph_get(path: str, access_token: str, params: dict | None = None) ->
     async with httpx.AsyncClient(timeout=30.0) as client:
         res = await client.get(f"{GRAPH_BASE}/{path.lstrip('/')}", params=q)
         res.raise_for_status()
+        return res.json()
+
+
+async def graph_post(
+    path: str,
+    access_token: str,
+    *,
+    data: dict | None = None,
+    params: dict | None = None,
+) -> dict:
+    q = dict(params or {})
+    q["access_token"] = access_token
+    if settings.meta_app_secret:
+        q["appsecret_proof"] = _appsecret_proof(access_token)
+    body = dict(data or {})
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        res = await client.post(f"{GRAPH_BASE}/{path.lstrip('/')}", params=q, data=body)
+        if not res.is_success:
+            detail = res.text[:500]
+            raise httpx.HTTPStatusError(
+                f"Meta Graph API error {res.status_code}: {detail}",
+                request=res.request,
+                response=res,
+            )
+        return res.json()
+
+
+async def graph_post_multipart(
+    path: str,
+    access_token: str,
+    *,
+    files: dict,
+    data: dict | None = None,
+) -> dict:
+    q = {"access_token": access_token}
+    if settings.meta_app_secret:
+        q["appsecret_proof"] = _appsecret_proof(access_token)
+    async with httpx.AsyncClient(timeout=120.0) as client:
+        res = await client.post(
+            f"{GRAPH_BASE}/{path.lstrip('/')}",
+            params=q,
+            files=files,
+            data=data or {},
+        )
+        if not res.is_success:
+            detail = res.text[:500]
+            raise httpx.HTTPStatusError(
+                f"Meta Graph API error {res.status_code}: {detail}",
+                request=res.request,
+                response=res,
+            )
         return res.json()
 
 
@@ -155,7 +235,7 @@ async def replace_connection_assets(
                 page_id=str(page["id"]),
                 name=page.get("name") or "Untitled Page",
                 category=page.get("category"),
-                page_access_token=page.get("access_token"),
+                page_access_token=encrypt_secret(page.get("access_token")),
                 picture_url=((page.get("picture") or {}).get("data") or {}).get("url"),
             )
         )
@@ -201,7 +281,7 @@ async def sync_connection_from_token(
     pages = await fetch_pages(access_token)
     ads = await fetch_ad_accounts(access_token)
 
-    connection.access_token = access_token
+    connection.access_token = encrypt_secret(access_token)
     connection.meta_user_id = str(profile.get("id") or "")
     connection.meta_user_name = profile.get("name")
     connection.scopes = ",".join(META_SCOPES)
