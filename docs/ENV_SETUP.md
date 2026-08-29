@@ -155,6 +155,8 @@ Paste these when ready (never commit to git):
 - [ ] `TOKEN_ENCRYPTION_KEY` (generated locally)
 - [ ] `GEMINI_API_KEY`
 - [ ] Meta `META_APP_ID` / `META_APP_SECRET` (Phase 2)
+- [ ] Meta App Dashboard → **Use cases** → add permissions: `ads_management`, `ads_read`, `business_management`, `pages_show_list`, `pages_read_engagement`, `public_profile` (do **not** add deprecated `email` or `instagram_basic` to Facebook Login)
+- [ ] Meta redirect URI: `https://adzmate-production-live.onrender.com/api/meta/oauth/callback`
 - [ ] Final Vercel production domain — `https://adzmate-production-live-web.vercel.app`
 
 ---

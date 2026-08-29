@@ -26,15 +26,16 @@ GRAPH_VERSION = "v21.0"
 GRAPH_BASE = f"https://graph.facebook.com/{GRAPH_VERSION}"
 OAUTH_DIALOG = f"https://www.facebook.com/{GRAPH_VERSION}/dialog/oauth"
 
+# Facebook Login scopes for Marketing API (via facebook.com/dialog/oauth).
+# Do not use instagram_business_* here — those are for Instagram Login only.
+# Do not request `email` — not valid for Marketing API OAuth on many app types.
 META_SCOPES = [
-    "email",
     "public_profile",
     "pages_show_list",
     "pages_read_engagement",
     "business_management",
     "ads_read",
     "ads_management",
-    "instagram_basic",
 ]
 
 # OAuth state: Redis in production, in-memory fallback for local dev
@@ -190,7 +191,7 @@ async def graph_post_multipart(
 
 
 async def fetch_meta_profile(access_token: str) -> dict:
-    return await graph_get("me", access_token, {"fields": "id,name,email"})
+    return await graph_get("me", access_token, {"fields": "id,name"})
 
 
 async def fetch_pages(access_token: str) -> list[dict]:
