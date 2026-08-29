@@ -3,25 +3,27 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { useAuth } from "@/components/AuthProvider";
+import { createClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
   const router = useRouter();
+  const { authConfigured, authConfig } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const configured = isSupabaseConfigured();
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!configured) return;
+    if (!authConfigured || !authConfig) return;
     setBusy(true);
     setError(null);
     setInfo(null);
     try {
-      const supabase = createClient();
+      const supabase = createClient(authConfig);
       const { data, error: err } = await supabase.auth.signUp({ email, password });
       if (err) throw err;
       if (data.session) {
@@ -50,9 +52,14 @@ export default function SignupPage() {
           </p>
         </div>
 
-        {!configured ? (
+        {!authConfigured ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            Configure Supabase env vars before creating accounts.
+            Supabase is not configured. Add{" "}
+            <code className="rounded bg-white px-1">SUPABASE_URL</code> and{" "}
+            <code className="rounded bg-white px-1">SUPABASE_ANON_KEY</code> to{" "}
+            <code className="rounded bg-white px-1">apps/web/.env.local</code> (or{" "}
+            <code className="rounded bg-white px-1">apps/web/.env</code>), then restart the web
+            app.
           </div>
         ) : (
           <form onSubmit={onSubmit} className="space-y-4">

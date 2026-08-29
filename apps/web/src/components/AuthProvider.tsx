@@ -9,12 +9,14 @@ import {
   useState,
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { apiReachabilityHint, type PublicAuthConfig } from "@/lib/config";
 import { fetchMe, MeResponse, WorkspaceSummary } from "@/lib/api";
+import { createClient } from "@/lib/supabase/client";
 
 type AuthContextValue = {
   loading: boolean;
   authConfigured: boolean;
+  authConfig: PublicAuthConfig | null;
   session: Session | null;
   user: User | null;
   me: MeResponse | null;
@@ -31,19 +33,25 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const WORKSPACE_KEY = "adzmate_workspace_id";
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const authConfigured = isSupabaseConfigured();
+export function AuthProvider({
+  authConfig,
+  children,
+}: {
+  authConfig: PublicAuthConfig | null;
+  children: React.ReactNode;
+}) {
+  const authConfigured = Boolean(authConfig);
   const [loading, setLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
   const [workspaceId, setWorkspaceIdState] = useState<string | null>(null);
 
   const getAccessToken = useCallback(async () => {
-    if (!authConfigured) return null;
-    const supabase = createClient();
+    if (!authConfig) return null;
+    const supabase = createClient(authConfig);
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
-  }, [authConfigured]);
+  }, [authConfig]);
 
   const refreshMe = useCallback(async () => {
     try {
@@ -63,11 +71,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setWorkspaceIdState(next);
       if (next) localStorage.setItem(WORKSPACE_KEY, next);
     } catch (err) {
-      // API may be restarting (uvicorn --reload) — don't crash the app shell
       console.warn(
-        "AdzMate API unreachable. Is it running on",
-        process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000",
-        "?",
+        "AdzMate API unreachable at",
+        apiReachabilityHint(),
         err instanceof Error ? err.message : err,
       );
     }
@@ -79,11 +85,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function boot() {
       try {
-        if (!authConfigured) {
+        if (!authConfig) {
           await refreshMe();
           return;
         }
-        const supabase = createClient();
+        const supabase = createClient(authConfig);
         const { data } = await supabase.auth.getSession();
         if (!mounted) return;
         setSession(data.session);
@@ -113,7 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       unsubscribe?.();
     };
-  }, [authConfigured, refreshMe]);
+  }, [authConfig, refreshMe]);
 
   const setWorkspaceId = useCallback((id: string) => {
     setWorkspaceIdState(id);
@@ -121,14 +127,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
-    if (!authConfigured) return;
-    const supabase = createClient();
+    if (!authConfig) return;
+    const supabase = createClient(authConfig);
     await supabase.auth.signOut();
     setSession(null);
     setMe(null);
     setWorkspaceIdState(null);
     localStorage.removeItem(WORKSPACE_KEY);
-  }, [authConfigured]);
+  }, [authConfig]);
 
   const workspace = useMemo(
     () => me?.workspaces.find((w) => w.id === workspaceId) || null,
@@ -138,6 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value: AuthContextValue = {
     loading,
     authConfigured,
+    authConfig,
     session,
     user: session?.user ?? null,
     me,

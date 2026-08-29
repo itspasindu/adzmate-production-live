@@ -100,7 +100,9 @@ ADZMATE_USE_LLM=0 ADZMATE_USE_AI_IMAGES=0 python -m app.seed --force
 Vercel env:
 
 ```text
-NEXT_PUBLIC_API_URL=https://YOUR-SERVICE.onrender.com
+API_INTERNAL_URL=https://YOUR-SERVICE.onrender.com
+SUPABASE_URL=https://YOUR-PROJECT.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
 ```
 
 Redeploy the web app.

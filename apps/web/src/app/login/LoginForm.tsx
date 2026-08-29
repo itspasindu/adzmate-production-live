@@ -3,25 +3,27 @@
 import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createClient, isSupabaseConfigured } from "@/lib/supabase/client";
+import { useAuth } from "@/components/AuthProvider";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
   const next = params.get("next") || "/";
+  const { authConfigured, authConfig } = useAuth();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const configured = isSupabaseConfigured();
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!configured) return;
+    if (!authConfigured || !authConfig) return;
     setBusy(true);
     setError(null);
     try {
-      const supabase = createClient();
+      const supabase = createClient(authConfig);
       const { error: err } = await supabase.auth.signInWithPassword({ email, password });
       if (err) throw err;
       router.replace(next);
@@ -44,12 +46,13 @@ export default function LoginForm() {
           <p className="mt-1 text-sm text-slate-500">Access your workspace campaigns and approvals.</p>
         </div>
 
-        {!configured ? (
+        {!authConfigured ? (
           <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
             Supabase is not configured. Add{" "}
-            <code className="rounded bg-white px-1">NEXT_PUBLIC_SUPABASE_URL</code> and{" "}
-            <code className="rounded bg-white px-1">NEXT_PUBLIC_SUPABASE_ANON_KEY</code> to{" "}
-            <code className="rounded bg-white px-1">apps/web/.env.local</code>, then restart the
+            <code className="rounded bg-white px-1">SUPABASE_URL</code> and{" "}
+            <code className="rounded bg-white px-1">SUPABASE_ANON_KEY</code> to{" "}
+            <code className="rounded bg-white px-1">apps/web/.env.local</code> (or{" "}
+            <code className="rounded bg-white px-1">apps/web/.env</code>), then restart the
             web app. Without them, the API runs in local demo mode (no login).
           </div>
         ) : (

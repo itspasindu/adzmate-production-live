@@ -1,5 +1,4 @@
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") || "http://localhost:8000";
+import { apiReachabilityHint, resolveApiUrl, resolveAssetUrl } from "@/lib/config";
 
 export type Campaign = {
   id: string;
@@ -177,14 +176,14 @@ async function request<T>(path: string, init?: RequestInit, opts?: RequestOpts):
 
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(resolveApiUrl(path), {
       ...init,
       headers,
       cache: "no-store",
     });
   } catch {
     throw new Error(
-      `Cannot reach API at ${API_BASE}. Confirm uvicorn is running and refresh. If it keeps failing, restart both API and web.`,
+      `Cannot reach API at ${apiReachabilityHint()}. Confirm the API is running and refresh.`,
     );
   }
   if (!res.ok) {
@@ -352,13 +351,12 @@ export function eventsUrl(campaignId: string, opts?: RequestOpts) {
   if (opts?.token) params.set("access_token", opts.token);
   if (opts?.workspaceId) params.set("workspace_id", opts.workspaceId);
   const qs = params.toString();
-  return `${API_BASE}/api/campaigns/${campaignId}/events${qs ? `?${qs}` : ""}`;
+  return resolveApiUrl(`/api/campaigns/${campaignId}/events${qs ? `?${qs}` : ""}`);
 }
 
 export function assetUrl(url?: string | null) {
   if (!url) return "";
-  if (url.startsWith("http")) return url;
-  return `${API_BASE}${url}`;
+  return resolveAssetUrl(url);
 }
 
 export type Business = {

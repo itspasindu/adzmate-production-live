@@ -113,7 +113,7 @@ External:
 | # | Task | Owner | Deliverable |
 |---|------|-------|-------------|
 | 0.1 | Seed Render production DB | Backend | 4 seed campaigns visible on live frontend |
-| 0.2 | Set `NEXT_PUBLIC_API_URL` on Vercel; disable deployment protection | Frontend | Public demo URL works without login wall |
+| 0.2 | Set `API_INTERNAL_URL` on Vercel; disable deployment protection | Frontend | Public demo URL works without login wall |
 | 0.3 | Set Render env: `PUBLIC_BASE_URL`, `WEB_APP_URL` | Backend | CORS + redirects correct |
 | 0.4 | Add `apps/web/.env.example` | Frontend | Onboarding doc matches repo |
 | 0.5 | Commit & sync README | All | Clean `main` branch |

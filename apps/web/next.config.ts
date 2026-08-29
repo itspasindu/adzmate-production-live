@@ -3,7 +3,9 @@ import path from "path";
 
 /** Server-side proxy target (Docker service name or localhost). */
 const apiInternal =
-  process.env.API_INTERNAL_URL?.replace(/\/$/, "") || "http://127.0.0.1:8000";
+  process.env.API_INTERNAL_URL?.replace(/\/$/, "") ||
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ||
+  "http://127.0.0.1:8000";
 
 const nextConfig: NextConfig = {
   output: "standalone",

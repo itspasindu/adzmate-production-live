@@ -12,15 +12,9 @@ COPY --from=deps /app/package.json /app/package-lock.json ./
 COPY --from=deps /app/apps/web/package.json ./apps/web/
 COPY apps/web ./apps/web
 
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-ARG NEXT_PUBLIC_SUPABASE_URL=
-ARG NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ARG API_INTERNAL_URL=http://api:8000
 
 ENV NEXT_TELEMETRY_DISABLED=1 \
-    NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
-    NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
-    NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
     API_INTERNAL_URL=$API_INTERNAL_URL
 
 RUN npm run build -w web

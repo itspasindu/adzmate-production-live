@@ -199,10 +199,10 @@ copy .env.example .env.local   # or: cp .env.example .env.local
 `apps/web/.env.local`:
 
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:8000
+API_INTERNAL_URL=http://127.0.0.1:8000
 # Optional Supabase (omit for local demo mode — no login gate)
-# NEXT_PUBLIC_SUPABASE_URL=
-# NEXT_PUBLIC_SUPABASE_ANON_KEY=
+# SUPABASE_URL=
+# SUPABASE_ANON_KEY=
 ```
 
 ```bash
@@ -243,7 +243,7 @@ python -m app.seed --force
 | **Local demo** (no Supabase env) | User `local-demo` / `demo@local.dev` — no login gate |
 | **Supabase on** | Email signup/login via `/signup` and `/login` |
 
-API auth needs `AUTH_ENABLED=true` plus `SUPABASE_URL` / `SUPABASE_JWT_SECRET`. Web needs `NEXT_PUBLIC_SUPABASE_*`.
+API auth needs `AUTH_ENABLED=true` plus `SUPABASE_URL` / `SUPABASE_JWT_SECRET`. Web needs `SUPABASE_URL` and `SUPABASE_ANON_KEY` (injected via server layout, not `NEXT_PUBLIC_*`).
 
 ---
 
@@ -265,10 +265,10 @@ Full script (with speech cues): [docs/DEMO_VIDEO_GUIDE.md](docs/DEMO_VIDEO_GUIDE
 | Piece | Host | Notes |
 |-------|------|--------|
 | API | [Render](https://render.com) | Native Python or Docker — see [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md) |
-| Web | [Vercel](https://vercel.com) | Root Directory `apps/web`; set `NEXT_PUBLIC_API_URL` to the Render URL |
+| Web | [Vercel](https://vercel.com) | Root Directory `apps/web`; set `API_INTERNAL_URL` to the Render URL |
 
 Render env (typical): `PUBLIC_BASE_URL`, `WEB_APP_URL`, optional Supabase / Gemini keys.  
-Vercel env: `NEXT_PUBLIC_API_URL=https://your-api.onrender.com`
+Vercel env: `API_INTERNAL_URL=https://your-api.onrender.com`, plus `SUPABASE_URL` / `SUPABASE_ANON_KEY` if using auth.
 
 See [docs/ENV_SETUP.md](docs/ENV_SETUP.md) for production environment variables.
 

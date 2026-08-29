@@ -12,7 +12,7 @@ Follow this guide after implementing Phase 1 infrastructure code.
 3. Paste into Render as `DATABASE_URL` (the API normalizes `postgresql://` → `postgresql+asyncpg://`).
 4. **Project Settings → API** → copy:
    - `SUPABASE_URL` → Render + Vercel
-   - `anon` key → Vercel `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `anon` key → Vercel `SUPABASE_ANON_KEY`
 5. **JWT Settings** → copy legacy JWT secret → Render `SUPABASE_JWT_SECRET` (if using HS256).
 6. Enable Email auth; configure redirect URLs:
    - `http://localhost:3000/**`
@@ -101,9 +101,9 @@ alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 | Variable | Value |
 |----------|--------|
-| `NEXT_PUBLIC_API_URL` | Render API URL |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key |
+| `API_INTERNAL_URL` | Render API URL (server-side + `/api-proxy` rewrites) |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Supabase anon key |
 
 Root Directory: `apps/web`  
 Disable Deployment Protection for public access (or use production domain).
