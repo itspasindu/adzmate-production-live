@@ -31,6 +31,15 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isAuthPage = path === "/login" || path === "/signup";
+  const isApiProxy =
+    path.startsWith("/api-proxy/") ||
+    path.startsWith("/uploads/") ||
+    path.startsWith("/generated/") ||
+    path.startsWith("/previews/");
+
+  if (isApiProxy) {
+    return response;
+  }
 
   if (!user && !isAuthPage) {
     const redirect = request.nextUrl.clone();

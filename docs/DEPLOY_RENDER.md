@@ -70,8 +70,8 @@ Fix: Root Directory `apps/api`, Dockerfile Path `Dockerfile`, Docker Context `.`
 
 | Key | Example / notes |
 |-----|-----------------|
-| `PUBLIC_BASE_URL` | `https://adzmate-api.onrender.com` |
-| `WEB_APP_URL` | `https://your-app.vercel.app` |
+| `PUBLIC_BASE_URL` | `https://adzmate-production-live.onrender.com` |
+| `WEB_APP_URL` | `https://adzmate-production-live-web.vercel.app` |
 | `DATABASE_URL` | `sqlite+aiosqlite:////var/data/adzmate.db` (with disk) |
 | `AUTH_ENABLED` | `true` / `false` |
 | `SUPABASE_URL` | project URL |
@@ -100,7 +100,7 @@ ADZMATE_USE_LLM=0 ADZMATE_USE_AI_IMAGES=0 python -m app.seed --force
 Vercel env:
 
 ```text
-API_INTERNAL_URL=https://YOUR-SERVICE.onrender.com
+API_INTERNAL_URL=https://adzmate-production-live.onrender.com
 SUPABASE_URL=https://YOUR-PROJECT.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 ```

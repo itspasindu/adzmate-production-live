@@ -1,4 +1,5 @@
 import os
+import uuid
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -98,8 +99,43 @@ def normalize_database_url(url: str) -> str:
     return url
 
 
+def uses_pgbouncer(url: str) -> bool:
+    """Supabase pooler (PgBouncer) breaks asyncpg prepared statements."""
+    lower = url.lower()
+    if ":6543" in lower or ".pooler.supabase.com" in lower:
+        return True
+    return os.getenv("DATABASE_USE_PGBOUNCER", "").lower() in {"1", "true", "yes"}
+
+
+def _append_query_param(url: str, key: str, value: str) -> str:
+    sep = "&" if "?" in url else "?"
+    if f"{key}=" in url:
+        return url
+    return f"{url}{sep}{key}={value}"
+
+
+def prepare_database_url(url: str) -> str:
+    """Normalize postgres URLs and disable prepared statements for PgBouncer poolers."""
+    normalized = normalize_database_url(url)
+    if "+asyncpg" in normalized and uses_pgbouncer(normalized):
+        normalized = _append_query_param(normalized, "prepared_statement_cache_size", "0")
+    return normalized
+
+
+def asyncpg_connect_args(url: str | None = None) -> dict:
+    """Disable asyncpg statement cache when connecting through PgBouncer."""
+    target = url or settings.database_url
+    if "+asyncpg" not in target or not uses_pgbouncer(target):
+        return {}
+    return {
+        "statement_cache_size": 0,
+        # PgBouncer transaction mode reuses backend connections; unique names avoid collisions.
+        "prepared_statement_name_func": lambda: f"__asyncpg_{uuid.uuid4()}__",
+    }
+
+
 settings = Settings()
-settings.database_url = normalize_database_url(settings.database_url)
+settings.database_url = prepare_database_url(settings.database_url)
 if settings.is_development() and os.getenv("ADZMATE_ALLOW_DEMO", "").lower() in {"1", "true", "yes"}:
     settings.allow_demo_user = True
 elif settings.is_development() and not settings.supabase_url and not settings.supabase_jwt_secret:

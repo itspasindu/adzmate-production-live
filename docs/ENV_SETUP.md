@@ -9,6 +9,7 @@ Follow this guide after implementing Phase 1 infrastructure code.
 
 1. Create a project at [supabase.com](https://supabase.com).
 2. **Database → Connection string → URI** (Transaction pooler, port **6543**).
+   The API auto-configures asyncpg for PgBouncer (no extra env vars needed).
 3. Paste into Render as `DATABASE_URL` (the API normalizes `postgresql://` → `postgresql+asyncpg://`).
 4. **Project Settings → API** → copy:
    - `SUPABASE_URL` → Render + Vercel
@@ -16,7 +17,7 @@ Follow this guide after implementing Phase 1 infrastructure code.
 5. **JWT Settings** → copy legacy JWT secret → Render `SUPABASE_JWT_SECRET` (if using HS256).
 6. Enable Email auth; configure redirect URLs:
    - `http://localhost:3000/**`
-   - `https://YOUR-VERCEL-APP.vercel.app/**`
+   - `https://adzmate-production-live-web.vercel.app/**`
 
 Run migrations on Render Shell after first deploy:
 
@@ -79,8 +80,8 @@ Set as `TOKEN_ENCRYPTION_KEY` on Render.
 | `SUPABASE_JWT_SECRET` | JWT secret |
 | `ADZMATE_ALLOW_DEMO` | `0` |
 | `PUBLIC_BASE_URL` | `https://adzmate-production-live.onrender.com` |
-| `WEB_APP_URL` | Your Vercel URL |
-| `CORS_ORIGINS` | `["https://YOUR-VERCEL-APP.vercel.app"]` |
+| `WEB_APP_URL` | `https://adzmate-production-live-web.vercel.app` |
+| `CORS_ORIGINS` | `["https://adzmate-production-live-web.vercel.app"]` |
 | `STORAGE_BACKEND` | `r2` |
 | R2_* | See section 3 |
 | `TOKEN_ENCRYPTION_KEY` | Fernet key |
@@ -101,7 +102,7 @@ alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 | Variable | Value |
 |----------|--------|
-| `API_INTERNAL_URL` | Render API URL (server-side + `/api-proxy` rewrites) |
+| `API_INTERNAL_URL` | `https://adzmate-production-live.onrender.com` |
 | `SUPABASE_URL` | Supabase project URL |
 | `SUPABASE_ANON_KEY` | Supabase anon key |
 
@@ -113,7 +114,8 @@ Disable Deployment Protection for public access (or use production domain).
 ## 7. Verify
 
 ```bash
-curl https://YOUR-API.onrender.com/api/health
+curl https://adzmate-production-live.onrender.com/api/health
+curl https://adzmate-production-live-web.vercel.app/api-proxy/health
 ```
 
 Expect:
@@ -153,7 +155,7 @@ Paste these when ready (never commit to git):
 - [ ] `TOKEN_ENCRYPTION_KEY` (generated locally)
 - [ ] `GEMINI_API_KEY`
 - [ ] Meta `META_APP_ID` / `META_APP_SECRET` (Phase 2)
-- [ ] Final Vercel production domain
+- [ ] Final Vercel production domain — `https://adzmate-production-live-web.vercel.app`
 
 ---
 

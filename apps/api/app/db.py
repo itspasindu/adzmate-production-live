@@ -4,10 +4,15 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
-from app.config import settings
+from app.config import asyncpg_connect_args, settings
 
 
-engine = create_async_engine(settings.database_url, echo=False)
+engine = create_async_engine(
+    settings.database_url,
+    echo=False,
+    connect_args=asyncpg_connect_args(),
+    pool_pre_ping=True,
+)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
