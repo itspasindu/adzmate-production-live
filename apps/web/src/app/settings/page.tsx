@@ -94,9 +94,10 @@ function SettingsContent() {
 
   async function onCreateBusiness(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    const form = e.currentTarget;
+    const fd = new FormData(form);
     setBusy(true);
     setError(null);
-    const fd = new FormData(e.currentTarget);
     try {
       const opts = await withAuth();
       const biz = await createBusiness(
@@ -111,7 +112,7 @@ function SettingsContent() {
         },
         opts,
       );
-      e.currentTarget.reset();
+      form.reset();
       setInfo(`Created business “${biz.name}”.`);
       await refresh(biz.id);
     } catch (err) {
