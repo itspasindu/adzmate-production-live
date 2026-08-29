@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from jinja2 import Template
 
 from app.config import settings
+from app.storage import get_storage
 
 LANDING_TEMPLATE = Template(
     """<!DOCTYPE html>
@@ -123,7 +122,7 @@ LANDING_TEMPLATE = Template(
 )
 
 
-def deploy_landing_page(
+async def deploy_landing_page(
     campaign_id: str,
     brand_name: str,
     product_name: str,
@@ -134,8 +133,8 @@ def deploy_landing_page(
     accent: str,
     creative_image_url: str | None,
 ) -> dict:
-    out_dir = settings.previews_dir / campaign_id
-    out_dir.mkdir(parents=True, exist_ok=True)
+    storage = get_storage()
+    key = storage.preview_key(campaign_id)
     html = LANDING_TEMPLATE.render(
         brand=brand_name,
         product=product_name,
@@ -147,15 +146,15 @@ def deploy_landing_page(
         image_url=creative_image_url,
         campaign_id=campaign_id,
     )
-    index = out_dir / "index.html"
-    index.write_text(html, encoding="utf-8")
+    await storage.save(key, html.encode("utf-8"), content_type="text/html; charset=utf-8")
 
-    preview_url = f"{settings.public_base_url}/previews/{campaign_id}/"
-    cloudfront_url = f"https://d{campaign_id[:8]}.cloudfront.net/{campaign_id}"
+    preview_url = storage.get_public_url(key)
+    if settings.effective_storage_backend() == "local":
+        preview_url = f"{settings.public_base_url.rstrip('/')}/previews/{campaign_id}/"
 
     return {
-        "path": str(index),
+        "path": key,
         "preview_url": preview_url,
-        "cloudfront_url": cloudfront_url,
+        "cloudfront_url": preview_url,
         "status": "deployed",
     }

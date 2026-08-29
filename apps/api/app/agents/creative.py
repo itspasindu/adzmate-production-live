@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from app.config import settings
 from app.services.image_gen import generate_scene, soft_cutout, try_rembg
 from app.services.llm import chat_json, llm_enabled
+from app.storage import read_image_bytes
 
 
 FORMATS = {
@@ -420,10 +422,15 @@ async def run_creative_agent(
     out_dir = settings.generated_dir / campaign_id / "creatives"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    used_upload = bool(product_image_path and Path(product_image_path).exists())
-    if used_upload:
+    raw_upload = await read_image_bytes(product_image_path)
+    if raw_upload is not None:
+        product = Image.open(BytesIO(raw_upload)).convert("RGBA")
+        used_upload = True
+    elif product_image_path and Path(product_image_path).exists():
         product = Image.open(product_image_path).convert("RGBA")
+        used_upload = True
     else:
+        used_upload = False
         product = Image.new("RGBA", (640, 640), (240, 240, 235, 255))
         draw = ImageDraw.Draw(product)
         draw.ellipse([120, 120, 520, 520], fill=_hex_to_rgb(brand_accent) + (255,))

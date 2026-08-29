@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.config import settings
 from app.models import Campaign
 from app.schemas import CampaignCreate
+from app.storage import resolve_asset_url
 
 
 OBJECTIVE_TO_GOAL = {
@@ -88,13 +89,15 @@ def build_campaign(
 
 
 def campaign_to_out(c: Campaign) -> dict:
-    image_url = None
-    if c.product_image_path:
-        image_url = f"{settings.public_base_url}/uploads/{c.id}/product.png"
+    image_url = resolve_asset_url(c.product_image_path)
+    if not image_url and c.product_image_path:
+        image_url = f"{settings.public_base_url.rstrip('/')}/uploads/{c.id}/product.png"
 
-    landing_url = None
-    if c.landing_page_path:
-        landing_url = f"{settings.public_base_url}/previews/{c.id}/"
+    landing_url = c.cloudfront_url or resolve_asset_url(
+        f"previews/{c.id}/index.html" if c.landing_page_path else None
+    )
+    if not landing_url and c.landing_page_path:
+        landing_url = f"{settings.public_base_url.rstrip('/')}/previews/{c.id}/"
 
     return {
         "id": c.id,

@@ -30,6 +30,10 @@ from app.auth import (
 from app.config import settings
 from app.db import SessionLocal, get_db
 from app.events import event_bus
+from app.integrations.meta.context import resolve_publish_context
+from app.integrations.meta.metrics_sync import sync_campaign_metrics
+from app.integrations.meta.pause import pause_meta_structure
+from app.jobs.enqueue import enqueue_campaign_pipeline, enqueue_metrics_sync
 from app.models import AgentRun, Campaign, Recommendation, SignalSnapshot, Workspace, WorkspaceMember, utcnow
 from app.models import ActionEvent
 from app.schemas import (
@@ -50,7 +54,11 @@ from app.schemas import (
 from app.serializers import build_campaign, campaign_to_out
 from app.services.actions import log_action
 from app.services.audiences import apply_audience_selection, build_audience_state, enrich_audiences_with_llm
-from app.services.meta_publish import build_draft_structure, mark_in_review, publish_structure
+from app.services.meta_publish import (
+    build_draft_for_workspace,
+    mark_in_review,
+    publish_structure,
+)
 from app.services.optimization import (
     init_optimization_from_structure,
     run_optimization_tick,
@@ -122,49 +130,73 @@ async def _pipeline_job(campaign_id: str) -> None:
         await run_pipeline(db, campaign)
 
 
+async def _schedule_pipeline(campaign_id: str, background: BackgroundTasks) -> None:
+    """Prefer ARQ worker when Redis is configured; fall back to in-process background task."""
+    if not await enqueue_campaign_pipeline(campaign_id):
+        background.add_task(_pipeline_job, campaign_id)
+
+
 @router.get("/health")
 async def health():
     from app.services.llm import llm_enabled, llm_provider
+    from app.redis_client import redis_health
+
+    db_ok = True
+    db_detail = "ok"
+    try:
+        async with SessionLocal() as session:
+            await session.execute(select(Campaign.id).limit(1))
+    except Exception as exc:
+        db_ok = False
+        db_detail = str(exc)[:200]
+
+    storage_ok = True
+    try:
+        if settings.effective_storage_backend() == "r2":
+            storage_ok = settings.r2_configured()
+        else:
+            settings.uploads_dir.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        storage_ok = False
+
+    redis_status = await redis_health()
+    using_postgres = not str(settings.database_url).startswith("sqlite")
 
     return {
-        "ok": True,
+        "ok": db_ok and storage_ok,
         "service": "adzmate-api",
+        "environment": settings.environment,
         "auth_enabled": auth_enabled(),
+        "database": {
+            "ok": db_ok,
+            "engine": "postgresql" if using_postgres else "sqlite",
+            "detail": db_detail,
+            "migrations": "alembic" if using_postgres else "sqlite_create_all",
+        },
+        "storage": {
+            "ok": storage_ok,
+            "backend": settings.effective_storage_backend(),
+        },
+        "redis": redis_status,
         "llm_enabled": llm_enabled(),
         "llm_provider": llm_provider() if llm_enabled() else None,
         "llm_model": settings.llm_model if llm_enabled() else None,
         "ai_images": settings.use_ai_images,
-        "image_providers": [
-            "pollinations.ai",
-            *(["huggingface"] if settings.hf_token else []),
-            "procedural",
-        ],
+        "token_encryption": bool(settings.token_encryption_key),
         "meta_oauth_configured": bool(settings.meta_app_id and settings.meta_app_secret),
-        "distilbert": settings.use_distilbert,
-        "rembg": settings.use_rembg,
         "capabilities": {
             "orchestrator": "real",
             "creative_agent": "real",
             "sentiment_agent": "real",
             "strategy_agent": "real",
             "signal_aggregator": "real",
-            "landing_deployer": "real_local_preview",
+            "landing_deployer": settings.effective_storage_backend(),
             "llm_enrichment": "real" if llm_enabled() else "offline_templates",
-            "distilbert": "real" if settings.use_distilbert else "lexicon_fallback",
             "ad_platform_metrics": "simulated_fixtures",
             "meta_campaign_publish": "simulated_ids",
             "meta_oauth": "real" if (settings.meta_app_id and settings.meta_app_secret) else "demo_connect",
-            "social_comments": "fixtures_plus_demo_events",
             "auto_pause": "supported",
         },
-        "demo_script": [
-            "Open Agents & workflows — show real vs mock labels",
-            "Aurora Bottle → LAUNCH decision + creatives",
-            "Approve → Publish my ads → landing live",
-            "Pulse Buds → HALT from low ROAS",
-            "On a live campaign: Spend spike → auto-pause (if enabled)",
-            "Optional: FORCE_FAIL_AGENT=creative for resilience",
-        ],
     }
 
 
@@ -270,6 +302,8 @@ async def create_campaign(
 
     from PIL import Image
 
+    from app.storage import get_storage
+
     data = CampaignCreate.model_validate(json.loads(payload))
     campaign_id = str(uuid.uuid4())
     image_path = None
@@ -289,12 +323,13 @@ async def create_campaign(
         except Exception as exc:
             raise HTTPException(400, f"Invalid image upload: {exc}") from exc
 
-        dest_dir = settings.uploads_dir / campaign_id
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        image_path = str(dest_dir / "product.png")
-        # Downscale huge uploads for faster compositing
         img.thumbnail((2048, 2048), Image.Resampling.LANCZOS)
-        img.save(image_path, "PNG")
+        buf = BytesIO()
+        img.save(buf, "PNG")
+        storage = get_storage()
+        key = storage.upload_key(campaign_id)
+        await storage.save(key, buf.getvalue(), content_type="image/png")
+        image_path = key
 
     campaign = build_campaign(
         campaign_id=campaign_id,
@@ -307,7 +342,8 @@ async def create_campaign(
     await db.commit()
     await db.refresh(campaign)
 
-    background.add_task(_pipeline_job, campaign_id)
+    if not await enqueue_campaign_pipeline(campaign_id):
+        background.add_task(_pipeline_job, campaign_id)
     return campaign_to_out(campaign)
 
 
@@ -329,7 +365,8 @@ async def create_campaign_json(
     db.add(campaign)
     await db.commit()
     await db.refresh(campaign)
-    background.add_task(_pipeline_job, campaign_id)
+    if not await enqueue_campaign_pipeline(campaign_id):
+        background.add_task(_pipeline_job, campaign_id)
     return campaign_to_out(campaign)
 
 
@@ -402,7 +439,9 @@ async def rebuild_meta_draft(
         campaign.audiences = build_audience_state(
             campaign, (creative.payload if creative else {}).get("audience_suggestions")
         )
-    campaign.meta_structure = build_draft_structure(campaign, assets=assets)
+    campaign.meta_structure = await build_draft_for_workspace(
+        db, campaign, assets=assets, workspace_id=ctx.workspace.id
+    )
     campaign.publish_status = "draft"
     await db.commit()
     await db.refresh(campaign)
@@ -437,7 +476,8 @@ async def publish_meta_campaign(
         raise HTTPException(400, "No Meta draft to publish")
     if (campaign.publish_status or "") == "published":
         return campaign_to_out(campaign)
-    published = publish_structure(campaign.meta_structure)
+    publish_ctx = await resolve_publish_context(db, ctx.workspace.id)
+    published = await publish_structure(campaign.meta_structure, publish_ctx=publish_ctx)
     campaign.meta_structure = published
     campaign.publish_status = "published"
     daily = float(getattr(campaign, "daily_budget", None) or 20.0)
@@ -445,6 +485,48 @@ async def publish_meta_campaign(
     if campaign.status in ("awaiting_approval", "received", "draft"):
         campaign.status = "live"
         campaign.decision = campaign.decision or "LAUNCH"
+    await db.commit()
+    await db.refresh(campaign)
+    return campaign_to_out(campaign)
+
+
+@router.post("/campaigns/{campaign_id}/meta/sync-metrics", response_model=CampaignOut)
+async def sync_meta_metrics(
+    campaign_id: str,
+    ctx: WorkspaceContext = Depends(require_role(*WRITER_ROLES)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Pull live spend/ROAS from Meta Insights into campaign metrics (requires connected Meta account)."""
+    campaign = await _get_campaign_in_workspace(db, campaign_id, ctx.workspace.id)
+    publish_ctx = await resolve_publish_context(db, ctx.workspace.id)
+    if not publish_ctx:
+        raise HTTPException(
+            400,
+            "No connected Meta ad account in this workspace. Connect Meta under Account settings.",
+        )
+    try:
+        ads = await fetch_account_insights(publish_ctx)
+    except Exception as exc:
+        raise HTTPException(400, f"Meta Insights sync failed: {exc}") from exc
+    campaign.mock_ads = ads
+    metrics = compute_metrics(ads)
+    snap = (
+        await db.execute(select(SignalSnapshot).where(SignalSnapshot.campaign_id == campaign_id))
+    ).scalar_one_or_none()
+    if snap:
+        snap.spend = metrics["spend"]
+        snap.roas = metrics["roas"]
+        snap.spend_burn = metrics["spend_burn"]
+        snap.updated_at = utcnow()
+    await log_action(
+        db,
+        campaign.id,
+        actor="strategy",
+        action="meta_metrics_synced",
+        summary=f"Synced Meta Insights — ROAS {metrics['roas']:.2f}x",
+        detail=f"Spend ${metrics['spend']:.0f} · Revenue ${metrics['revenue']:.0f}",
+        level="info",
+    )
     await db.commit()
     await db.refresh(campaign)
     return campaign_to_out(campaign)
@@ -469,7 +551,9 @@ async def select_audiences(
         ).scalar_one_or_none()
         assets = (creative.payload if creative else {}).get("assets") or []
         if assets or campaign.meta_structure:
-            campaign.meta_structure = build_draft_structure(campaign, assets=assets)
+            campaign.meta_structure = await build_draft_for_workspace(
+                db, campaign, assets=assets, workspace_id=ctx.workspace.id
+            )
             campaign.publish_status = campaign.publish_status or "draft"
     await db.commit()
     await db.refresh(campaign)
@@ -584,7 +668,8 @@ async def rerun_campaign(
     campaign.decision = None
     campaign.decision_reason = None
     await db.commit()
-    background.add_task(_pipeline_job, campaign_id)
+    if not await enqueue_campaign_pipeline(campaign_id):
+        background.add_task(_pipeline_job, campaign_id)
     return campaign_to_out(campaign)
 
 

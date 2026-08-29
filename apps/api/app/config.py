@@ -16,8 +16,20 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "AdzMate API"
+    environment: str = Field(default="development", validation_alias="ENVIRONMENT")
     database_url: str = f"sqlite+aiosqlite:///{API_ROOT / 'adzmate.db'}"
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    redis_url: str | None = Field(default=None, validation_alias="REDIS_URL")
+    storage_backend: str = Field(default="local", validation_alias="STORAGE_BACKEND")
+    token_encryption_key: str | None = Field(default=None, validation_alias="TOKEN_ENCRYPTION_KEY")
+    allow_demo_user: bool = Field(default=False, validation_alias="ADZMATE_ALLOW_DEMO")
+    # Cloudflare R2 (S3-compatible)
+    r2_account_id: str | None = Field(default=None, validation_alias="R2_ACCOUNT_ID")
+    r2_access_key_id: str | None = Field(default=None, validation_alias="R2_ACCESS_KEY_ID")
+    r2_secret_access_key: str | None = Field(default=None, validation_alias="R2_SECRET_ACCESS_KEY")
+    r2_bucket: str | None = Field(default=None, validation_alias="R2_BUCKET")
+    r2_public_url: str | None = Field(default=None, validation_alias="R2_PUBLIC_URL")
+    r2_endpoint: str | None = Field(default=None, validation_alias="R2_ENDPOINT")
     # Prefer apps/api/fixtures (Docker / Root Directory = apps/api); fall back to repo-root fixtures
     fixtures_dir: Path = API_ROOT / "fixtures"
     uploads_dir: Path = API_ROOT / "uploads"
@@ -28,6 +40,7 @@ class Settings(BaseSettings):
     roas_floor: float = 1.5
     creative_ready_threshold: float = 0.7
     force_fail_agent: str | None = None
+    use_fixture_metrics: bool = Field(default=True, validation_alias="ADZMATE_USE_FIXTURE_METRICS")
 
     # Supabase Auth
     auth_enabled: bool = True
@@ -61,8 +74,37 @@ class Settings(BaseSettings):
     )
     web_app_url: str = Field(default="http://localhost:3000", validation_alias="WEB_APP_URL")
 
+    def is_production(self) -> bool:
+        return self.environment.lower() in ("production", "prod")
+
+    def is_development(self) -> bool:
+        return self.environment.lower() in ("development", "dev", "local")
+
+    def r2_configured(self) -> bool:
+        return bool(self.r2_bucket and self.r2_access_key_id and self.r2_secret_access_key)
+
+    def effective_storage_backend(self) -> str:
+        if self.storage_backend == "r2" and self.r2_configured():
+            return "r2"
+        return "local"
+
+
+def normalize_database_url(url: str) -> str:
+    """Convert Supabase/Heroku postgres URLs to SQLAlchemy asyncpg form."""
+    if url.startswith("postgres://"):
+        return url.replace("postgres://", "postgresql+asyncpg://", 1)
+    if url.startswith("postgresql://") and "+asyncpg" not in url and "+psycopg" not in url:
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    return url
+
 
 settings = Settings()
+settings.database_url = normalize_database_url(settings.database_url)
+if settings.is_development() and os.getenv("ADZMATE_ALLOW_DEMO", "").lower() in {"1", "true", "yes"}:
+    settings.allow_demo_user = True
+elif settings.is_development() and not settings.supabase_url and not settings.supabase_jwt_secret:
+    # Local hackathon demo when Supabase is not configured
+    settings.allow_demo_user = True
 if os.getenv("FIXTURES_DIR"):
     settings.fixtures_dir = Path(os.getenv("FIXTURES_DIR", ""))
 elif not settings.fixtures_dir.is_dir() and (ROOT / "fixtures").is_dir():
@@ -98,6 +140,12 @@ if os.getenv("ADZMATE_USE_AI_IMAGES", "").lower() in {"0", "false", "no"}:
     settings.use_ai_images = False
 if os.getenv("ADZMATE_USE_REMBG", "").lower() in {"1", "true", "yes"}:
     settings.use_rembg = True
+
+_use_fixture_env = os.getenv("ADZMATE_USE_FIXTURE_METRICS", "").lower()
+if _use_fixture_env in {"0", "false", "no"}:
+    settings.use_fixture_metrics = False
+elif settings.is_production() and _use_fixture_env not in {"1", "true", "yes"}:
+    settings.use_fixture_metrics = False
 
 # Auto-enable LLM when a key is present unless explicitly disabled
 if settings.llm_api_key and _use_llm_env not in {"0", "false", "no"}:

@@ -14,6 +14,16 @@ OBJECTIVE_TO_META = {
     "engagement": "OUTCOME_ENGAGEMENT",
 }
 
+CTA_TO_META = {
+    "Shop Now": "SHOP_NOW",
+    "Learn More": "LEARN_MORE",
+    "Sign Up": "SIGN_UP",
+    "Book Now": "BOOK_TRAVEL",
+    "Contact Us": "CONTACT_US",
+    "Download": "DOWNLOAD",
+    "Get Offer": "GET_OFFER",
+}
+
 DEFAULT_PLACEMENTS = [
     "facebook_feed",
     "instagram_feed",
@@ -175,7 +185,7 @@ def mark_in_review(structure: dict) -> dict:
     return structure
 
 
-def publish_structure(structure: dict) -> dict:
+def publish_structure_mock(structure: dict) -> dict:
     """Flip draft → published with simulated Meta object IDs."""
     structure = dict(structure or {})
     if not structure.get("campaign"):
@@ -213,3 +223,45 @@ def publish_structure(structure: dict) -> dict:
     structure["status"] = "published"
     structure["published_at"] = _now()
     return structure
+
+
+async def publish_structure(
+    structure: dict,
+    *,
+    publish_ctx=None,
+    prefer_live: bool = True,
+) -> dict:
+    """Publish draft — uses Meta Marketing API when a real connection is available."""
+    if (
+        prefer_live
+        and publish_ctx
+        and getattr(publish_ctx, "is_real", False)
+        and (structure or {}).get("mode") in ("meta_ready", "meta_live", None)
+    ):
+        from app.integrations.meta.publisher import publish_to_meta
+
+        return await publish_to_meta(structure, publish_ctx)
+    return publish_structure_mock(structure)
+
+
+async def build_draft_for_workspace(
+    db,
+    campaign: Campaign,
+    *,
+    assets: list[dict] | None = None,
+    workspace_id: str,
+) -> dict:
+    from app.integrations.meta.context import resolve_publish_context
+
+    ctx = await resolve_publish_context(db, workspace_id)
+    return build_draft_structure(
+        campaign,
+        assets=assets,
+        ad_account_id=ctx.ad_account_id if ctx else None,
+        page_id=ctx.page_id if ctx else None,
+        instagram_id=ctx.instagram_id if ctx else None,
+    )
+
+
+# Backward-compatible alias
+publish_structure_sync = publish_structure_mock
