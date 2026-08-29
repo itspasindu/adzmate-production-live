@@ -28,6 +28,7 @@ function SettingsContent() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [meta, setMeta] = useState<MetaConnection | null>(null);
   const [oauthConfigured, setOauthConfigured] = useState(false);
+  const [metaConfigError, setMetaConfigError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -43,6 +44,7 @@ function SettingsContent() {
         const [list, status] = await Promise.all([listBusinesses(opts), metaOAuthStatus(opts)]);
         setBusinesses(list);
         setOauthConfigured(status.oauth_configured);
+        setMetaConfigError(status.config_error ?? null);
         const preferred =
           preferId ||
           params.get("business_id") ||
@@ -397,6 +399,9 @@ function SettingsContent() {
                       Connect Facebook Page, Instagram, and Ad Account via OAuth
                       {oauthConfigured ? "." : " (demo mode — Meta App credentials not set)."}
                     </p>
+                    {metaConfigError && (
+                      <p className="mt-2 text-sm text-amber-800">{metaConfigError}</p>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-2">
                     {!meta ? (

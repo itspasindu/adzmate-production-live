@@ -90,6 +90,25 @@ class Settings(BaseSettings):
         return "local"
 
 
+def _strip_or_none(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
+
+
+def is_localhost_url(url: str) -> bool:
+    lower = url.lower()
+    return "localhost" in lower or "127.0.0.1" in lower
+
+
+def resolve_meta_oauth_redirect_uri() -> str:
+    explicit = settings.meta_oauth_redirect_uri
+    if explicit:
+        return explicit.rstrip("/")
+    return f"{settings.public_base_url.rstrip('/')}/api/meta/oauth/callback"
+
+
 def normalize_database_url(url: str) -> str:
     """Convert Supabase/Heroku postgres URLs to SQLAlchemy asyncpg form."""
     if url.startswith("postgres://"):
@@ -136,6 +155,11 @@ def asyncpg_connect_args(url: str | None = None) -> dict:
 
 settings = Settings()
 settings.database_url = prepare_database_url(settings.database_url)
+settings.meta_app_id = _strip_or_none(settings.meta_app_id)
+settings.meta_app_secret = _strip_or_none(settings.meta_app_secret)
+settings.meta_oauth_redirect_uri = _strip_or_none(settings.meta_oauth_redirect_uri)
+settings.public_base_url = settings.public_base_url.strip()
+settings.web_app_url = settings.web_app_url.strip()
 if settings.is_development() and os.getenv("ADZMATE_ALLOW_DEMO", "").lower() in {"1", "true", "yes"}:
     settings.allow_demo_user = True
 elif settings.is_development() and not settings.supabase_url and not settings.supabase_jwt_secret:

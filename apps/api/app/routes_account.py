@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import WRITER_ROLES, WorkspaceContext, get_workspace_context, require_role
-from app.config import settings
+from app.config import resolve_meta_oauth_redirect_uri, settings
 from app.db import get_db
 from app.models import (
     Business,
@@ -129,10 +129,12 @@ async def _connection_out(db: AsyncSession, conn: MetaConnection) -> MetaConnect
 
 @router.get("/account/meta/status")
 async def meta_status():
+    config_err = meta_svc.meta_oauth_env_error()
     return {
-        "oauth_configured": meta_svc.meta_oauth_configured(),
+        "oauth_configured": config_err is None and meta_svc.meta_oauth_configured(),
         "app_id_set": bool(settings.meta_app_id),
         "demo_connect_available": True,
+        "config_error": config_err,
     }
 
 
@@ -260,16 +262,10 @@ async def meta_oauth_start(
     db: AsyncSession = Depends(get_db),
 ):
     await _get_business_in_workspace(db, business_id, ctx.workspace.id)
-    if not meta_svc.meta_oauth_configured():
-        raise HTTPException(
-            400,
-            "Meta OAuth is not configured. Set META_APP_ID and META_APP_SECRET, "
-            "or use demo connect.",
-        )
-    redirect_uri = (
-        settings.meta_oauth_redirect_uri
-        or f"{settings.public_base_url.rstrip('/')}/api/meta/oauth/callback"
-    )
+    config_err = meta_svc.meta_oauth_env_error()
+    if config_err:
+        raise HTTPException(400, config_err)
+    redirect_uri = resolve_meta_oauth_redirect_uri()
     url = await meta_svc.build_oauth_url(
         business_id=business_id,
         workspace_id=ctx.workspace.id,
@@ -299,6 +295,7 @@ async def meta_oauth_callback(
         return RedirectResponse(f"{frontend}/settings?meta=error&message=invalid_state")
 
     try:
+        meta_svc.assert_meta_oauth_ready()
         token_data = await meta_svc.exchange_code_for_token(code, payload["redirect_uri"])
         access_token = token_data["access_token"]
         business_id = payload["business_id"]

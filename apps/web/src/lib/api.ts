@@ -506,9 +506,10 @@ export function disconnectMeta(businessId: string, opts?: RequestOpts) {
 }
 
 export function metaOAuthStatus(opts?: RequestOpts) {
-  return request<{ oauth_configured: boolean; app_id_set: boolean; demo_connect_available: boolean }>(
-    "/api/account/meta/status",
-    undefined,
-    opts,
-  );
+  return request<{
+    oauth_configured: boolean;
+    app_id_set: boolean;
+    demo_connect_available: boolean;
+    config_error?: string | null;
+  }>("/api/account/meta/status", undefined, opts);
 }

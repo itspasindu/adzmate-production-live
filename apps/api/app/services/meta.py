@@ -16,7 +16,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+from app.config import is_localhost_url, resolve_meta_oauth_redirect_uri, settings
 from app.crypto import encrypt_secret
 from app.models import MetaAdAccount, MetaConnection, MetaInstagramAccount, MetaPage, utcnow
 
@@ -90,6 +90,31 @@ def meta_oauth_configured() -> bool:
     return bool(settings.meta_app_id and settings.meta_app_secret)
 
 
+def meta_oauth_env_error() -> str | None:
+    """Return a user-facing config hint when OAuth cannot run."""
+    if not meta_oauth_configured():
+        return "Set META_APP_ID and META_APP_SECRET on the API server (Render env vars)."
+    redirect = resolve_meta_oauth_redirect_uri()
+    if settings.is_production() and (
+        is_localhost_url(redirect) or is_localhost_url(settings.web_app_url)
+    ):
+        return (
+            "Production Meta OAuth must use HTTPS URLs. Set PUBLIC_BASE_URL, WEB_APP_URL, and "
+            "META_OAUTH_REDIRECT_URI to your Render/Vercel domains (not localhost)."
+        )
+    return None
+
+
+def assert_meta_oauth_ready() -> None:
+    err = meta_oauth_env_error()
+    if err:
+        raise ValueError(err)
+
+
+def resolve_oauth_redirect_uri() -> str:
+    return resolve_meta_oauth_redirect_uri()
+
+
 def get_connection_access_token(connection: MetaConnection) -> str | None:
     from app.crypto import decrypt_secret
 
@@ -105,6 +130,7 @@ def _appsecret_proof(token: str) -> str:
 
 
 async def exchange_code_for_token(code: str, redirect_uri: str) -> dict:
+    assert_meta_oauth_ready()
     params = {
         "client_id": settings.meta_app_id,
         "client_secret": settings.meta_app_secret,

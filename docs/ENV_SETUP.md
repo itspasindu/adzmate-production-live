@@ -85,6 +85,9 @@ Set as `TOKEN_ENCRYPTION_KEY` on Render.
 | `STORAGE_BACKEND` | `r2` |
 | R2_* | See section 3 |
 | `TOKEN_ENCRYPTION_KEY` | Fernet key |
+| `META_APP_ID` | Meta app ID |
+| `META_APP_SECRET` | Meta app secret |
+| `META_OAUTH_REDIRECT_URI` | `https://adzmate-production-live.onrender.com/api/meta/oauth/callback` |
 | `ADZMATE_USE_LLM` | `1` |
 | `GEMINI_API_KEY` | Your key |
 
