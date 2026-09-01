@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   actOnRecommendation,
+  assetUrl,
   CampaignDetail,
   demoTick,
   eventsUrl,
@@ -320,7 +321,7 @@ export default function CampaignDetailPage() {
                 {assets.map((a) => (
                   <figure key={a.format} className="card overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={a.url} alt={a.headline} className="aspect-square w-full object-cover" />
+                    <img src={assetUrl(a.url)} alt={a.headline} className="aspect-square w-full object-cover" />
                     <figcaption className="space-y-1 px-3 py-3">
                       <p className="text-sm font-semibold text-slate-900">{a.headline}</p>
                       {a.primary_text && <p className="text-xs text-slate-600">{a.primary_text}</p>}
@@ -628,7 +629,7 @@ export default function CampaignDetailPage() {
                 {assets.map((a) => (
                   <figure key={a.format} className="card overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={a.url} alt={a.headline} className="aspect-video w-full object-cover" />
+                    <img src={assetUrl(a.url)} alt={a.headline} className="aspect-video w-full object-cover" />
                     <figcaption className="space-y-1.5 px-3 py-2.5">
                       <p className="text-sm font-medium text-slate-900">{a.headline}</p>
                       {a.primary_text && <p className="text-xs text-slate-600">{a.primary_text}</p>}

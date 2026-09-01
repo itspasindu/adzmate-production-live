@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
@@ -64,9 +65,15 @@ from app.services.optimization import (
     run_optimization_tick,
     update_rules,
 )
-from app.services.orchestrator import approve_recommendation, reject_recommendation, run_pipeline
+from app.services.orchestrator import (
+    approve_recommendation,
+    complete_launch_deploy,
+    reject_recommendation,
+    run_pipeline,
+)
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _agent_out(run: AgentRun) -> dict:
@@ -130,6 +137,32 @@ async def _pipeline_job(campaign_id: str) -> None:
         if campaign.status not in ("received", "draft"):
             return
         await run_pipeline(db, campaign)
+
+
+async def _approve_deploy_job(campaign_id: str) -> None:
+    async with SessionLocal() as db:
+        result = await db.execute(select(Campaign).where(Campaign.id == campaign_id))
+        campaign = result.scalar_one_or_none()
+        if not campaign or campaign.status != "deploying":
+            return
+        try:
+            await complete_launch_deploy(db, campaign)
+        except Exception as exc:
+            logger.exception("Launch deploy failed for %s", campaign_id)
+            campaign.status = "awaiting_approval"
+            warnings = list(campaign.warnings or [])
+            warnings.append(f"Deploy failed: {exc}")
+            campaign.warnings = warnings[:12]
+            await log_action(
+                db,
+                campaign.id,
+                actor="system",
+                action="deploy_failed",
+                summary="Landing/Meta deploy failed",
+                detail=str(exc)[:240],
+                level="error",
+            )
+            await db.commit()
 
 
 async def _schedule_pipeline(campaign_id: str, background: BackgroundTasks) -> None:
@@ -703,6 +736,7 @@ async def list_recommendations(
 async def recommendation_action(
     rec_id: str,
     body: ApprovalAction,
+    background: BackgroundTasks,
     ctx: WorkspaceContext = Depends(require_role(*APPROVER_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
@@ -718,12 +752,20 @@ async def recommendation_action(
     if not rec:
         raise HTTPException(404, "Recommendation not found")
     campaign = await _get_campaign_in_workspace(db, rec.campaign_id, ctx.workspace.id)
-    if body.action == "approve":
-        await approve_recommendation(db, campaign, rec)
-    elif body.action == "reject":
-        await reject_recommendation(db, rec)
-    else:
-        raise HTTPException(400, "action must be approve or reject")
+    try:
+        if body.action == "approve":
+            outcome = await approve_recommendation(db, campaign, rec)
+            if outcome == "needs_deploy":
+                background.add_task(_approve_deploy_job, campaign.id)
+        elif body.action == "reject":
+            await reject_recommendation(db, rec)
+        else:
+            raise HTTPException(400, "action must be approve or reject")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Recommendation action failed for %s", rec_id)
+        raise HTTPException(500, f"Action failed: {exc}")
     await db.refresh(rec)
     return _rec_out(rec)
 

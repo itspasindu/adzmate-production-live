@@ -56,14 +56,47 @@ export function resolveApiUrl(path: string): string {
 
 export function resolveAssetUrl(url: string): string {
   if (!url) return "";
+
+  const toSameOriginPath = (raw: string): string | null => {
+    if (raw.startsWith("/generated/") || raw.startsWith("/uploads/") || raw.startsWith("/previews/")) {
+      return raw;
+    }
+    if (raw.startsWith("/assets/")) {
+      return raw;
+    }
+    if (raw.startsWith("http://") || raw.startsWith("https://")) {
+      try {
+        const pathname = new URL(raw).pathname;
+        if (
+          pathname.startsWith("/generated/") ||
+          pathname.startsWith("/uploads/") ||
+          pathname.startsWith("/previews/") ||
+          pathname.startsWith("/assets/")
+        ) {
+          return pathname;
+        }
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
+
+  if (typeof window !== "undefined") {
+    const sameOrigin = toSameOriginPath(url);
+    if (sameOrigin) return sameOrigin;
+    if (url.startsWith("http://") || url.startsWith("https://")) return url;
+    const path = url.startsWith("/") ? url : `/${url}`;
+    return toSameOriginPath(path) || path;
+  }
+
+  const sameOrigin = toSameOriginPath(url);
+  if (sameOrigin) {
+    return `${Config.apiInternalUrl}${sameOrigin}`;
+  }
   if (url.startsWith("http://") || url.startsWith("https://")) return url;
 
   const path = url.startsWith("/") ? url : `/${url}`;
-
-  if (typeof window !== "undefined") {
-    return path;
-  }
-
   return `${Config.apiInternalUrl}${path}`;
 }
 

@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from app.config import settings
 from app.services.image_gen import generate_scene, soft_cutout, try_rembg
 from app.services.llm import chat_json, llm_enabled
-from app.storage import read_image_bytes
+from app.storage import get_storage, read_image_bytes, resolve_asset_url
 
 
 FORMATS = {
@@ -483,6 +483,10 @@ async def run_creative_agent(
             brand_accent,
             path,
         )
+        storage_key = f"generated/{campaign_id}/creatives/{fmt}.png"
+        storage = get_storage()
+        await storage.save(storage_key, path.read_bytes(), content_type="image/png")
+        public_url = resolve_asset_url(storage_key) or f"{settings.public_base_url.rstrip('/')}/{storage_key}"
         assets.append(
             {
                 "format": fmt,
@@ -494,7 +498,8 @@ async def run_creative_agent(
                 "image_engine": img_engine,
                 "width": size[0],
                 "height": size[1],
-                "url": f"{settings.public_base_url}/generated/{campaign_id}/creatives/{fmt}.png",
+                "url": public_url,
+                "storage_key": storage_key,
             }
         )
 

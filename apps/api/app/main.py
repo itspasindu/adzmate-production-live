@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import PlainTextResponse
@@ -10,6 +10,7 @@ from app.db import init_db
 from app.redis_client import close_redis
 from app.routes import router
 from app.routes_account import router as account_router
+from app.storage import get_storage
 
 
 @asynccontextmanager
@@ -68,10 +69,31 @@ app.add_middleware(CorsMiddleware)
 app.include_router(router, prefix="/api")
 app.include_router(account_router, prefix="/api")
 
-if settings.effective_storage_backend() == "local":
-    app.mount("/uploads", StaticFiles(directory=str(settings.uploads_dir)), name="uploads")
-    app.mount("/generated", StaticFiles(directory=str(settings.generated_dir)), name="generated")
-    app.mount("/previews", StaticFiles(directory=str(settings.previews_dir), html=True), name="previews")
+# Local creative files are always written to disk; mount even when R2 is the primary store.
+app.mount("/uploads", StaticFiles(directory=str(settings.uploads_dir)), name="uploads")
+app.mount("/generated", StaticFiles(directory=str(settings.generated_dir)), name="generated")
+app.mount("/previews", StaticFiles(directory=str(settings.previews_dir), html=True), name="previews")
+
+
+@app.get("/assets/{key:path}")
+async def serve_stored_asset(key: str):
+    """Serve R2 (or other remote) assets when R2_PUBLIC_URL is not configured."""
+    storage = get_storage()
+    if not storage.exists(key):
+        raise HTTPException(status_code=404, detail="Asset not found")
+    data = await storage.read_bytes(key)
+    lower = key.lower()
+    if lower.endswith(".png"):
+        media_type = "image/png"
+    elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
+        media_type = "image/jpeg"
+    elif lower.endswith(".webp"):
+        media_type = "image/webp"
+    elif lower.endswith(".html"):
+        media_type = "text/html"
+    else:
+        media_type = "application/octet-stream"
+    return Response(content=data, media_type=media_type)
 
 
 @app.get("/")

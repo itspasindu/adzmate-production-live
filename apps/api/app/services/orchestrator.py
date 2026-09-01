@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from datetime import datetime, timezone
 
@@ -30,7 +31,10 @@ from app.services.meta_publish import (
     build_draft_for_workspace,
     mark_in_review,
     publish_structure,
+    publish_structure_mock,
 )
+
+logger = logging.getLogger(__name__)
 from app.services.optimization import init_optimization_from_structure
 
 
@@ -324,7 +328,100 @@ async def run_pipeline(db: AsyncSession, campaign: Campaign) -> Campaign:
     return campaign
 
 
-async def approve_recommendation(db: AsyncSession, campaign: Campaign, recommendation: Recommendation) -> Campaign:
+async def complete_launch_deploy(db: AsyncSession, campaign: Campaign) -> Campaign:
+    """Deploy landing page and publish Meta draft (may take 30–90s)."""
+    result = await db.execute(
+        select(AgentRun).where(AgentRun.campaign_id == campaign.id, AgentRun.agent == "creative")
+    )
+    creative_run = result.scalar_one_or_none()
+    assets = (creative_run.payload if creative_run else {}).get("assets", [])
+    headline = assets[0]["headline"] if assets else f"Meet {campaign.product_name}"
+    cta = assets[0]["cta"] if assets else "Shop Now"
+    image_url = assets[0]["url"] if assets else None
+    if campaign.product_image_path:
+        image_url = image_url or resolve_asset_url(campaign.product_image_path)
+
+    deployed = await deploy_landing_page(
+        campaign.id,
+        campaign.brand_name,
+        campaign.product_name,
+        campaign.brief,
+        headline,
+        cta,
+        campaign.brand_primary,
+        campaign.brand_accent,
+        image_url,
+    )
+    campaign.landing_page_path = deployed["path"]
+    campaign.cloudfront_url = deployed["cloudfront_url"]
+    await log_action(
+        db,
+        campaign.id,
+        actor="deployer",
+        action="landing_deployed",
+        summary="Landing page built and published to preview CDN",
+        detail=deployed.get("preview_url"),
+        level="success",
+    )
+
+    if campaign.meta_structure:
+        publish_ctx = await resolve_publish_context(db, campaign.workspace_id)
+        try:
+            published = await publish_structure(
+                campaign.meta_structure,
+                publish_ctx=publish_ctx,
+                prefer_live=True,
+                require_live=False,
+            )
+        except Exception as exc:
+            logger.exception("Meta publish failed for %s", campaign.id)
+            published = publish_structure_mock(campaign.meta_structure)
+            published["publish_error"] = str(exc)[:240]
+            published["notes"] = (
+                f"Live Meta publish failed ({exc}). Published with demo IDs locally — "
+                "connect Meta and use Publish to Ads Manager to retry."
+            )
+            await log_action(
+                db,
+                campaign.id,
+                actor="system",
+                action="meta_publish_failed",
+                summary="Meta publish failed — saved demo publish locally",
+                detail=str(exc)[:240],
+                level="warning",
+            )
+        else:
+            await log_action(
+                db,
+                campaign.id,
+                actor="system",
+                action="meta_published",
+                summary="Published Meta draft structure and started optimization rules",
+                detail=(published.get("campaign") or {}).get("meta_id"),
+                level="success",
+            )
+        campaign.meta_structure = published
+        campaign.publish_status = "published"
+        daily = float(getattr(campaign, "daily_budget", None) or 20.0)
+        campaign.optimization = init_optimization_from_structure(published, daily)
+
+    campaign.status = "live"
+    campaign.decision = "LAUNCH"
+    await db.commit()
+    await _emit(
+        campaign.id,
+        "deployed",
+        {
+            "preview_url": deployed["preview_url"],
+            "cloudfront_url": deployed["cloudfront_url"],
+            "publish_status": campaign.publish_status,
+            "meta_campaign_id": (campaign.meta_structure or {}).get("campaign", {}).get("meta_id"),
+        },
+    )
+    return campaign
+
+
+async def approve_recommendation(db: AsyncSession, campaign: Campaign, recommendation: Recommendation) -> str:
     recommendation.status = "approved"
     await db.flush()
     await log_action(
@@ -344,75 +441,7 @@ async def approve_recommendation(db: AsyncSession, campaign: Campaign, recommend
             campaign.publish_status = "in_review"
         await db.commit()
         await _emit(campaign.id, "status", {"status": "deploying"})
-
-        result = await db.execute(
-            select(AgentRun).where(AgentRun.campaign_id == campaign.id, AgentRun.agent == "creative")
-        )
-        creative_run = result.scalar_one_or_none()
-        assets = (creative_run.payload if creative_run else {}).get("assets", [])
-        headline = assets[0]["headline"] if assets else f"Meet {campaign.product_name}"
-        cta = assets[0]["cta"] if assets else "Shop Now"
-        image_url = assets[0]["url"] if assets else None
-        if campaign.product_image_path:
-            image_url = image_url or resolve_asset_url(campaign.product_image_path)
-
-        deployed = await deploy_landing_page(
-            campaign.id,
-            campaign.brand_name,
-            campaign.product_name,
-            campaign.brief,
-            headline,
-            cta,
-            campaign.brand_primary,
-            campaign.brand_accent,
-            image_url,
-        )
-        campaign.landing_page_path = deployed["path"]
-        campaign.cloudfront_url = deployed["cloudfront_url"]
-        await log_action(
-            db,
-            campaign.id,
-            actor="deployer",
-            action="landing_deployed",
-            summary="Landing page built and published to preview CDN",
-            detail=deployed.get("preview_url"),
-            level="success",
-        )
-
-        if campaign.meta_structure:
-            publish_ctx = await resolve_publish_context(db, campaign.workspace_id)
-            published = await publish_structure(
-                campaign.meta_structure,
-                publish_ctx=publish_ctx,
-                require_live=True,
-            )
-            campaign.meta_structure = published
-            campaign.publish_status = "published"
-            daily = float(getattr(campaign, "daily_budget", None) or 20.0)
-            campaign.optimization = init_optimization_from_structure(published, daily)
-            await log_action(
-                db,
-                campaign.id,
-                actor="system",
-                action="meta_published",
-                summary="Published Meta draft structure and started optimization rules",
-                detail=(published.get("campaign") or {}).get("meta_id"),
-                level="success",
-            )
-
-        campaign.status = "live"
-        campaign.decision = "LAUNCH"
-        await db.commit()
-        await _emit(
-            campaign.id,
-            "deployed",
-            {
-                "preview_url": deployed["preview_url"],
-                "cloudfront_url": deployed["cloudfront_url"],
-                "publish_status": campaign.publish_status,
-                "meta_campaign_id": (campaign.meta_structure or {}).get("campaign", {}).get("meta_id"),
-            },
-        )
+        return "needs_deploy"
 
     elif recommendation.type == "halt":
         campaign.status = "halted"
@@ -500,7 +529,7 @@ async def approve_recommendation(db: AsyncSession, campaign: Campaign, recommend
         await db.commit()
         await _emit(campaign.id, "ads_resumed", metrics)
 
-    return campaign
+    return "done"
 
 
 async def reject_recommendation(db: AsyncSession, recommendation: Recommendation) -> None:
