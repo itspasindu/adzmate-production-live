@@ -223,13 +223,29 @@ export default function CampaignDetailPage() {
                 {action.kind === "wait" && "We're writing ad copy, designing creatives, and choosing audiences. This usually takes under a minute."}
                 {action.kind === "publish" && "Your ads are ready as a draft. Nothing is live yet — tap Publish when you like what you see."}
                 {action.kind === "done" && "Your ads are running. We'll automatically spend more on the ones that work best."}
+                {action.kind === "done" &&
+                  (campaign.meta_structure as { mode?: string; ads_manager_url?: string })?.mode ===
+                    "meta_live" &&
+                  (campaign.meta_structure as { ads_manager_url?: string })?.ads_manager_url && (
+                    <>
+                      {" "}
+                      <a
+                        href={(campaign.meta_structure as { ads_manager_url?: string }).ads_manager_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-medium text-moss underline"
+                      >
+                        Open in Meta Ads Manager
+                      </a>
+                    </>
+                  )}
                 {action.kind === "pause" && "Ads are paused or a pause was recommended. Check the review queue if needed."}
                 {action.kind === "fix" && "Something failed while creating ads. Try creating again or open Technical for details."}
               </p>
               <div className="mt-5 flex flex-wrap gap-2">
                 {pendingDecision && campaign.status === "awaiting_approval" && (
                   <button disabled={busy} onClick={approvePrimary} className="btn-primary text-base px-5 py-2.5">
-                    {campaign.decision === "HALT" ? "Confirm pause" : "Publish my ads"}
+                    {campaign.decision === "HALT" ? "Confirm pause" : "Publish to Ads Manager"}
                   </button>
                 )}
                 {campaign.publish_status !== "published" && campaign.meta_structure && campaign.status !== "awaiting_approval" && (
@@ -249,7 +265,7 @@ export default function CampaignDetailPage() {
                       }
                     }}
                   >
-                    Publish my ads
+                    Publish to Ads Manager
                   </button>
                 )}
                 {campaign.landing_page_url && (
@@ -791,6 +807,9 @@ function MetaAutomationPanels({
   campaignId: string;
 }) {
   const structure = (campaign.meta_structure || {}) as {
+    mode?: string;
+    ads_manager_url?: string;
+    ads_manager_account_url?: string;
     status?: string;
     steps?: Array<{ step: string; status: string; detail?: string }>;
     campaign?: { name?: string; objective?: string; status?: string; meta_id?: string };
@@ -815,6 +834,9 @@ function MetaAutomationPanels({
   const audiences = campaign.audiences?.recommended || [];
   const opt = campaign.optimization || {};
   const publishStatus = campaign.publish_status || "none";
+  const metaMode = structure.mode;
+  const adsManagerUrl = structure.ads_manager_url;
+  const isLiveInMeta = metaMode === "meta_live" && Boolean(structure.campaign?.meta_id);
 
   async function run(fn: (opts: { token?: string | null; workspaceId?: string | null }) => Promise<unknown>) {
     setBusy(true);
@@ -840,9 +862,20 @@ function MetaAutomationPanels({
               <p className="muted mt-1">
                 Draft → Review → Publish · status:{" "}
                 <span className="font-medium text-slate-800">{publishStatus}</span>
+                {metaMode && (
+                  <>
+                    {" "}
+                    · mode: <span className="font-medium text-slate-800">{metaMode}</span>
+                  </>
+                )}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {isLiveInMeta && adsManagerUrl && (
+                <a href={adsManagerUrl} target="_blank" rel="noreferrer" className="btn-primary">
+                  Open in Ads Manager
+                </a>
+              )}
               {publishStatus === "published" && (
                 <button
                   type="button"
@@ -877,12 +910,35 @@ function MetaAutomationPanels({
                     className="btn-primary"
                     onClick={() => run((opts) => publishMetaCampaign(campaignId, opts))}
                   >
-                    Publish
+                    Publish to Ads Manager
                   </button>
                 </>
               )}
             </div>
           </div>
+
+          {publishStatus === "published" && metaMode === "demo_mock" && (
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              Published in <strong>demo mode</strong> only — this campaign is not in Meta Ads Manager.
+              Connect Meta under Account settings, select an Ad Account and Page, rebuild the draft,
+              then publish again.
+            </div>
+          )}
+
+          {isLiveInMeta && (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+              Campaign created in Meta Ads Manager as <strong>PAUSED</strong>. Open Ads Manager to
+              review and activate when ready.
+              {adsManagerUrl && (
+                <>
+                  {" "}
+                  <a href={adsManagerUrl} target="_blank" rel="noreferrer" className="font-medium underline">
+                    View campaign
+                  </a>
+                </>
+              )}
+            </div>
+          )}
 
           {structure.steps && (
             <ol className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">

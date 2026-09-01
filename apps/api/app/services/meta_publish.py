@@ -230,14 +230,21 @@ async def publish_structure(
     *,
     publish_ctx=None,
     prefer_live: bool = True,
+    require_live: bool = False,
 ) -> dict:
     """Publish draft — uses Meta Marketing API when a real connection is available."""
-    if (
+    can_live = (
         prefer_live
         and publish_ctx
         and getattr(publish_ctx, "is_real", False)
         and (structure or {}).get("mode") in ("meta_ready", "meta_live", None)
-    ):
+    )
+    if require_live and not can_live:
+        raise ValueError(
+            "Cannot publish to Meta Ads Manager yet. Connect Meta under Account settings, "
+            "select an Ad Account and Facebook Page, then rebuild the draft and publish again."
+        )
+    if can_live:
         from app.integrations.meta.publisher import publish_to_meta
 
         return await publish_to_meta(structure, publish_ctx)

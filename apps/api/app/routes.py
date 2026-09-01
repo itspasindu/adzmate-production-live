@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
@@ -127,13 +127,15 @@ async def _pipeline_job(campaign_id: str) -> None:
         campaign = result.scalar_one_or_none()
         if not campaign:
             return
+        if campaign.status not in ("received", "draft"):
+            return
         await run_pipeline(db, campaign)
 
 
 async def _schedule_pipeline(campaign_id: str, background: BackgroundTasks) -> None:
-    """Prefer ARQ worker when Redis is configured; fall back to in-process background task."""
-    if not await enqueue_campaign_pipeline(campaign_id):
-        background.add_task(_pipeline_job, campaign_id)
+    """Run pipeline on the API web process (reliable on Render). Optionally mirror to ARQ worker."""
+    background.add_task(_pipeline_job, campaign_id)
+    await enqueue_campaign_pipeline(campaign_id)
 
 
 @router.get("/health")
@@ -465,17 +467,27 @@ async def submit_meta_review(
 @router.post("/campaigns/{campaign_id}/meta/publish", response_model=CampaignOut)
 async def publish_meta_campaign(
     campaign_id: str,
+    live: bool = Query(default=True, description="Require real Meta Ads Manager publish"),
     ctx: WorkspaceContext = Depends(require_role(*APPROVER_ROLES)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Publish Meta draft without going through recommendation (manual publish)."""
+    """Publish Meta draft. With live=true (default), creates PAUSED objects in Ads Manager."""
     campaign = await _get_campaign_in_workspace(db, campaign_id, ctx.workspace.id)
     if not campaign.meta_structure:
-        raise HTTPException(400, "No Meta draft to publish")
+        raise HTTPException(400, "No Meta draft to publish — run the pipeline or Rebuild draft first")
     if (campaign.publish_status or "") == "published":
         return campaign_to_out(campaign)
     publish_ctx = await resolve_publish_context(db, ctx.workspace.id)
-    published = await publish_structure(campaign.meta_structure, publish_ctx=publish_ctx)
+    try:
+        published = await publish_structure(
+            campaign.meta_structure,
+            publish_ctx=publish_ctx,
+            require_live=live,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(400, f"Meta publish failed: {exc}") from exc
     campaign.meta_structure = published
     campaign.publish_status = "published"
     daily = float(getattr(campaign, "daily_budget", None) or 20.0)
@@ -665,8 +677,7 @@ async def rerun_campaign(
     campaign.decision = None
     campaign.decision_reason = None
     await db.commit()
-    if not await enqueue_campaign_pipeline(campaign_id):
-        background.add_task(_pipeline_job, campaign_id)
+    await _schedule_pipeline(campaign_id, background)
     return campaign_to_out(campaign)
 
 

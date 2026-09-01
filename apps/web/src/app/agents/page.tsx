@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Campaign, CampaignDetail, fetchHealth, getCampaign, listCampaigns } from "@/lib/api";
+import { Campaign, CampaignDetail, fetchHealth, getCampaign, listCampaigns, rerunCampaign } from "@/lib/api";
 import { Alert, PageHeader, StatusBadge } from "@/components/ui";
 import { useApiAuth } from "@/lib/useApiAuth";
 import { useAuth } from "@/components/AuthProvider";
@@ -64,6 +64,7 @@ export default function AgentsPage() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -92,6 +93,30 @@ export default function AgentsPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, workspaceId, withAuth]);
+
+  useEffect(() => {
+    if (!detail || !["received", "agents_running", "aggregating"].includes(detail.campaign.status)) return;
+    const timer = window.setInterval(() => {
+      void onPick(selectedId);
+    }, 4000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.campaign.status, selectedId]);
+
+  async function onStartAgents() {
+    if (!selectedId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const opts = await withAuth();
+      await rerunCampaign(selectedId, opts);
+      setDetail(await getCampaign(selectedId, opts));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to start agents");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function onPick(id: string) {
     setSelectedId(id);
@@ -246,7 +271,24 @@ export default function AgentsPage() {
               <span className="text-xs text-slate-500">
                 Auto-pause: {detail.campaign.auto_pause_enabled === false ? "off" : "on"}
               </span>
+              {detail.campaign.status === "received" && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="btn-primary text-xs"
+                  onClick={() => void onStartAgents()}
+                >
+                  {busy ? "Starting…" : "Start agents"}
+                </button>
+              )}
             </div>
+
+            {detail.campaign.status === "received" && (
+              <p className="mt-3 text-sm text-amber-800">
+                Agents are queued but not running yet. Click <strong>Start agents</strong> or redeploy the API
+                if this stays stuck.
+              </p>
+            )}
 
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               {["creative", "sentiment", "strategy"].map((name) => {

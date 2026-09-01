@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from app.integrations.meta.context import MetaPublishContext
+from app.integrations.meta import ads_manager as ads_manager_links
 from app.services import meta as meta_svc
 from app.services.meta_publish import CTA_TO_META, OBJECTIVE_TO_META, _now
 
@@ -172,6 +173,8 @@ async def publish_to_meta(structure: dict, ctx: MetaPublishContext) -> dict:
     structure["status"] = "published"
     structure["mode"] = "meta_live"
     structure["published_at"] = datetime.now(timezone.utc).isoformat()
+    structure["ads_manager_url"] = ads_manager_links.campaign_url(ctx.ad_account_id, meta_campaign_id)
+    structure["ads_manager_account_url"] = ads_manager_links.ad_account_url(ctx.ad_account_id)
     structure["notes"] = (
         "Published via Meta Marketing API. Campaign, ad set, and ads are PAUSED until you activate "
         "them in Meta Ads Manager."

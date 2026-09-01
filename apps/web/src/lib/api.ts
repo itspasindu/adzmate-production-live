@@ -300,8 +300,13 @@ export function submitMetaReview(campaignId: string, opts?: RequestOpts) {
   return request<Campaign>(`/api/campaigns/${campaignId}/meta/submit-review`, { method: "POST" }, opts);
 }
 
-export function publishMetaCampaign(campaignId: string, opts?: RequestOpts) {
-  return request<Campaign>(`/api/campaigns/${campaignId}/meta/publish`, { method: "POST" }, opts);
+export function rerunCampaign(campaignId: string, opts?: RequestOpts) {
+  return request<Campaign>(`/api/campaigns/${campaignId}/rerun`, { method: "POST" }, opts);
+}
+
+export function publishMetaCampaign(campaignId: string, opts?: RequestOpts, live = true) {
+  const q = live ? "?live=true" : "?live=false";
+  return request<Campaign>(`/api/campaigns/${campaignId}/meta/publish${q}`, { method: "POST" }, opts);
 }
 
 export function syncMetaMetrics(campaignId: string, opts?: RequestOpts) {

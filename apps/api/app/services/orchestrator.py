@@ -73,6 +73,9 @@ async def _upsert_agent(
 
 
 async def run_pipeline(db: AsyncSession, campaign: Campaign) -> Campaign:
+    if campaign.status not in ("received", "draft"):
+        return campaign
+
     campaign.status = "agents_running"
     campaign.warnings = []
     campaign.updated_at = utcnow()
@@ -381,6 +384,7 @@ async def approve_recommendation(db: AsyncSession, campaign: Campaign, recommend
             published = await publish_structure(
                 campaign.meta_structure,
                 publish_ctx=publish_ctx,
+                require_live=True,
             )
             campaign.meta_structure = published
             campaign.publish_status = "published"
