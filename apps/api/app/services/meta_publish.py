@@ -102,10 +102,15 @@ def build_draft_structure(
         "status": "DRAFT",
         "daily_budget": daily,
         "billing_event": "IMPRESSIONS",
-        "optimization_goal": "OFFSITE_CONVERSIONS"
-        if (campaign.objective or "sales") == "sales"
-        else "LINK_CLICKS",
+        "optimization_goal": (
+            "LEAD_GENERATION"
+            if (campaign.objective or "sales") == "leads"
+            else "OFFSITE_CONVERSIONS"
+            if (campaign.objective or "sales") == "sales"
+            else "LINK_CLICKS"
+        ),
         "bid_strategy": "LOWEST_COST_WITHOUT_CAP",
+        "advantage_audience": 0,
         "placements": list(DEFAULT_PLACEMENTS),
         "audience": primary_audience,
         "targeting": {
@@ -120,6 +125,7 @@ def build_draft_structure(
             "custom_audiences": primary_audience.get("custom_audiences") or [],
             "lookalikes": primary_audience.get("lookalikes") or [],
             "retargeting": primary_audience.get("retargeting") or [],
+            "targeting_automation": {"advantage_audience": 0},
         },
         "start_time": _now(),
         "page_id": page_id,
