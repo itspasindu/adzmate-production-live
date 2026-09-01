@@ -162,6 +162,42 @@ Paste these when ready (never commit to git):
 - [ ] Meta redirect URI: `https://adzmate-production-live.onrender.com/api/meta/oauth/callback`
 - [ ] Final Vercel production domain — `https://adzmate-production-live-web.vercel.app`
 
+### Meta App Dashboard (fix “domain isn't included in the app's domains”)
+
+In [developers.facebook.com](https://developers.facebook.com) → your app:
+
+**1. Settings → Basic → App domains** (host only, no `https://`)
+
+```
+adzmate-production-live-web.vercel.app
+adzmate-production-live.onrender.com
+```
+
+If you test from a Vercel preview URL (e.g. `…-git-….vercel.app`), add that **exact** hostname too, or use only the production Vercel URL above.
+
+**2. Facebook Login → Settings**
+
+| Field | Value |
+|-------|--------|
+| **Valid OAuth Redirect URIs** | `https://adzmate-production-live.onrender.com/api/meta/oauth/callback` |
+| **Login from Devices** | Off (unless needed) |
+
+**3. Settings → Basic**
+
+| Field | Value |
+|-------|--------|
+| **Privacy Policy URL** | A public HTTPS page (required for live mode) |
+| **Terms of Service URL** | Optional but recommended |
+| **App mode** | Development (test users) or Live (after App Review) |
+
+**4. Render env must match** (no `localhost` in production):
+
+- `WEB_APP_URL=https://adzmate-production-live-web.vercel.app`
+- `PUBLIC_BASE_URL=https://adzmate-production-live.onrender.com`
+- `META_OAUTH_REDIRECT_URI=https://adzmate-production-live.onrender.com/api/meta/oauth/callback`
+
+After saving Meta settings, wait 1–2 minutes, then connect from **https://adzmate-production-live-web.vercel.app/settings** (not localhost, not an unlisted preview URL unless you added that domain).
+
 ---
 
 *See also: [PROJECT_PLAN.md](./PROJECT_PLAN.md) · [DEPLOY_RENDER.md](./DEPLOY_RENDER.md)*

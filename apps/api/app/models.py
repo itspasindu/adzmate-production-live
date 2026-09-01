@@ -237,7 +237,7 @@ class MetaPage(Base):
     name: Mapped[str] = mapped_column(String(200))
     category: Mapped[str | None] = mapped_column(String(120), nullable=True)
     page_access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
-    picture_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    picture_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
@@ -250,7 +250,7 @@ class MetaInstagramAccount(Base):
     username: Mapped[str] = mapped_column(String(200))
     name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     page_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    profile_picture_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    profile_picture_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
