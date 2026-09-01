@@ -19,7 +19,7 @@ Avoids Dockerfile context issues in a monorepo.
 | **Language** | Python 3 |
 | **Root Directory** | `apps/api` |
 | **Build Command** | `pip install -r requirements.txt` |
-| **Start Command** | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| **Start Command** | `bash start.sh` |
 | **Health Check Path** | `/api/health` |
 
 3. Env vars — see below. Deploy. Seed via Shell.
@@ -44,8 +44,10 @@ Avoids Dockerfile context issues in a monorepo.
 Render injects `PORT`. Set **Docker Command** to:
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port $PORT
+bash start.sh
 ```
+
+(`apps/api/start.sh` runs migrations, then uvicorn.)
 
 ### Common failure (`transferring context: 2B`)
 

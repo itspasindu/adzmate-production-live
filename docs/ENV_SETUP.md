@@ -94,8 +94,10 @@ Set as `TOKEN_ENCRYPTION_KEY` on Render.
 **Start command** (in Render dashboard or `render.yaml`):
 
 ```bash
-alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+bash start.sh
 ```
+
+(`start.sh` runs `alembic upgrade head` then starts uvicorn. Do **not** use `alembic upgrade head && uvicorn ...` as a single Render start command — Render passes `&&` to alembic as arguments.)
 
 **Root Directory:** `apps/api`
 
