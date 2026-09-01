@@ -92,6 +92,7 @@ def build_draft_structure(
         "objective": OBJECTIVE_TO_META.get(campaign.objective or "sales", "OUTCOME_SALES"),
         "status": "DRAFT",
         "special_ad_categories": [],
+        "is_adset_budget_sharing_enabled": False,
         "ad_account_id": ad_account_id or "act_demo",
     }
 

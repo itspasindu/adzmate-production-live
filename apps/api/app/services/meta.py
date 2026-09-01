@@ -172,7 +172,9 @@ def _encode_graph_form_data(data: dict | None) -> dict:
     for key, value in (data or {}).items():
         if value is None:
             continue
-        if isinstance(value, (dict, list)):
+        if isinstance(value, bool):
+            encoded[key] = "true" if value else "false"
+        elif isinstance(value, (dict, list)):
             encoded[key] = json.dumps(value)
         else:
             encoded[key] = str(value)

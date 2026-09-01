@@ -86,6 +86,10 @@ async def publish_to_meta(structure: dict, ctx: MetaPublishContext) -> dict:
         "objective": objective,
         "status": "PAUSED",
         "special_ad_categories": camp_node.get("special_ad_categories") or [],
+        # Required v24+ when budget lives on ad sets (ABO), not on the campaign.
+        "is_adset_budget_sharing_enabled": bool(
+            camp_node.get("is_adset_budget_sharing_enabled", False)
+        ),
     }
     camp_res = await meta_svc.graph_post(f"{act}/campaigns", ctx.access_token, data=camp_payload)
     meta_campaign_id = str(camp_res["id"])
