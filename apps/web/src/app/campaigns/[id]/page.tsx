@@ -22,6 +22,7 @@ import {
 import { Alert, PageHeader, StatusBadge } from "@/components/ui";
 import { useApiAuth } from "@/lib/useApiAuth";
 import { useAuth } from "@/components/AuthProvider";
+import { APP_HOME } from "@/lib/routes";
 import {
   friendlyCampaignStatus,
   friendlyPublishStatus,
@@ -177,7 +178,7 @@ export default function CampaignDetailPage() {
     <div className="mx-auto max-w-5xl">
       <PageHeader
         breadcrumb={
-          <Link href="/" className="text-sm text-slate-500 hover:text-moss">
+          <Link href={APP_HOME} className="text-sm text-slate-500 hover:text-moss">
             ← My ads
           </Link>
         }

@@ -5,11 +5,12 @@ import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { createClient } from "@/lib/supabase/client";
+import { APP_HOME } from "@/lib/routes";
 
 export default function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/";
+  const next = params.get("next") || APP_HOME;
   const { authConfigured, authConfig } = useAuth();
 
   const [email, setEmail] = useState("");
@@ -94,6 +95,10 @@ export default function LoginForm() {
           No account?{" "}
           <Link href="/signup" className="font-medium text-moss hover:underline">
             Create one
+          </Link>
+          {" · "}
+          <Link href="/" className="font-medium text-slate-500 hover:text-moss">
+            Back to home
           </Link>
         </p>
       </div>

@@ -21,3 +21,7 @@ node_modules/
 apps/**/.env
 apps/**/.env.local
 
+docs/presentation/README.md
+docs/presentation/ADZMATE_PITCH_DECK.md
+docs/presentation/AdzMate_TeamSUDO_IDEALIZE2026.pdf
+docs/presentation/adzmate-pitch-deck.html

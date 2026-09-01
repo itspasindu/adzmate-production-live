@@ -4,23 +4,25 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/components/AuthProvider";
+import { APP_HOME, isAuthRoute, isPublicRoute } from "@/lib/routes";
 
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const { loading, authConfigured, session } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const isAuthPage = pathname === "/login" || pathname === "/signup";
+  const isAuthPage = isAuthRoute(pathname);
+  const isPublic = isPublicRoute(pathname);
 
   useEffect(() => {
     if (loading) return;
     if (!authConfigured) return;
-    if (!session && !isAuthPage) {
+    if (!session && !isPublic) {
       router.replace(`/login?next=${encodeURIComponent(pathname)}`);
     }
     if (session && isAuthPage) {
-      router.replace("/");
+      router.replace(APP_HOME);
     }
-  }, [authConfigured, isAuthPage, loading, pathname, router, session]);
+  }, [authConfigured, isAuthPage, isPublic, loading, pathname, router, session]);
 
   if (loading) {
     return (
@@ -30,7 +32,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (authConfigured && !session && !isAuthPage) {
+  if (authConfigured && !session && !isPublic) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-paper px-4 text-center">
         <p className="text-sm text-slate-600">Redirecting to sign in…</p>

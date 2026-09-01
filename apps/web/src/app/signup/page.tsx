@@ -5,6 +5,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import { createClient } from "@/lib/supabase/client";
+import { APP_HOME } from "@/lib/routes";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -27,7 +28,7 @@ export default function SignupPage() {
       const { data, error: err } = await supabase.auth.signUp({ email, password });
       if (err) throw err;
       if (data.session) {
-        router.replace("/");
+        router.replace(APP_HOME);
         router.refresh();
         return;
       }

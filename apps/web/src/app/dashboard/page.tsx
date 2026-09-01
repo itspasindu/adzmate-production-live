@@ -21,7 +21,7 @@ function formatDate(value: string) {
   }
 }
 
-export default function HomePage() {
+export default function DashboardPage() {
   const { withAuth, workspaceId } = useApiAuth();
   const { loading: authLoading } = useAuth();
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);

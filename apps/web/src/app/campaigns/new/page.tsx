@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { createCampaignForm } from "@/lib/api";
+import { APP_HOME } from "@/lib/routes";
 import { Alert, PageHeader } from "@/components/ui";
 import { useApiAuth } from "@/lib/useApiAuth";
 
@@ -91,7 +92,7 @@ export default function NewCampaignPage() {
     <div className="mx-auto max-w-2xl">
       <PageHeader
         breadcrumb={
-          <Link href="/" className="text-sm text-slate-500 hover:text-moss">
+          <Link href={APP_HOME} className="text-sm text-slate-500 hover:text-moss">
             ← My ads
           </Link>
         }

@@ -5,10 +5,11 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { createWorkspace } from "@/lib/api";
+import { APP_HOME, isAuthRoute, isMarketingRoute } from "@/lib/routes";
 
 const nav = [
   {
-    href: "/",
+    href: APP_HOME,
     label: "My ads",
     description: "See & manage campaigns",
     icon: (
@@ -67,7 +68,7 @@ const nav = [
   },
 ];
 function isActive(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
+  if (href === APP_HOME) return pathname === APP_HOME;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -88,8 +89,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     refreshMe,
   } = useAuth();
 
-  const isAuthPage = pathname === "/login" || pathname === "/signup";
-  if (isAuthPage) {
+  const isAuthPage = isAuthRoute(pathname);
+  const isMarketingPage = isMarketingRoute(pathname);
+  if (isAuthPage || isMarketingPage) {
     return <>{children}</>;
   }
 

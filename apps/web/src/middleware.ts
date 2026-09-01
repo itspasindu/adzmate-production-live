@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 import { Config, isSupabaseConfigured } from "@/lib/config";
+import { APP_HOME, isPublicRoute } from "@/lib/routes";
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
@@ -30,27 +31,28 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isAuthPage = path === "/login" || path === "/signup";
+  const isPublic = isPublicRoute(path);
   const isApiProxy =
     path.startsWith("/api-proxy/") ||
     path.startsWith("/uploads/") ||
     path.startsWith("/generated/") ||
-    path.startsWith("/previews/");
+    path.startsWith("/previews/") ||
+    path.startsWith("/assets/");
 
   if (isApiProxy) {
     return response;
   }
 
-  if (!user && !isAuthPage) {
+  if (!user && !isPublic) {
     const redirect = request.nextUrl.clone();
     redirect.pathname = "/login";
     redirect.searchParams.set("next", path);
     return NextResponse.redirect(redirect);
   }
 
-  if (user && isAuthPage) {
+  if (user && (path === "/login" || path === "/signup")) {
     const redirect = request.nextUrl.clone();
-    redirect.pathname = "/";
+    redirect.pathname = APP_HOME;
     redirect.search = "";
     return NextResponse.redirect(redirect);
   }
