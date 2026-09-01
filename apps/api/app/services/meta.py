@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import logging
 import secrets
 import uuid
@@ -165,6 +166,19 @@ async def graph_get(path: str, access_token: str, params: dict | None = None) ->
         return res.json()
 
 
+def _encode_graph_form_data(data: dict | None) -> dict:
+    """Meta Graph form posts require JSON-encoded strings for list/dict fields."""
+    encoded: dict[str, str] = {}
+    for key, value in (data or {}).items():
+        if value is None:
+            continue
+        if isinstance(value, (dict, list)):
+            encoded[key] = json.dumps(value)
+        else:
+            encoded[key] = str(value)
+    return encoded
+
+
 async def graph_post(
     path: str,
     access_token: str,
@@ -176,7 +190,7 @@ async def graph_post(
     q["access_token"] = access_token
     if settings.meta_app_secret:
         q["appsecret_proof"] = _appsecret_proof(access_token)
-    body = dict(data or {})
+    body = _encode_graph_form_data(data)
     async with httpx.AsyncClient(timeout=60.0) as client:
         res = await client.post(f"{GRAPH_BASE}/{path.lstrip('/')}", params=q, data=body)
         if not res.is_success:
@@ -204,7 +218,7 @@ async def graph_post_multipart(
             f"{GRAPH_BASE}/{path.lstrip('/')}",
             params=q,
             files=files,
-            data=data or {},
+            data=_encode_graph_form_data(data),
         )
         if not res.is_success:
             detail = res.text[:500]
